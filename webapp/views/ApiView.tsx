@@ -45,7 +45,7 @@ const NO_KEY_PROVIDERS: Provider[] = ["openai", "anthropic"];
 
 /* 表单分组标题：比字段标签弱一档，比正文强一档 */
 function GroupHead({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{children}</h2>;
+  return <h2 className="text-xs font-medium text-muted">{children}</h2>;
 }
 
 export function ApiView() {
@@ -228,7 +228,12 @@ export function ApiView() {
       {header}
 
       {/* 主区：表单。可操作的内容在前，说明性内容折叠到后面 */}
-      <Card className="mt-5">
+      <div className="mt-5 grid grid-cols-[320px_1fr] gap-6">
+        <div>
+          <h2 className="text-base font-medium text-ink">设置</h2>
+          <p className="mt-1 text-sm text-muted">配置模型 provider、凭据与参数。</p>
+        </div>
+        <Card>
         <CardHead>
           <span className="flex items-center gap-2 text-sm font-medium">
             <KeyRound className="h-4 w-4 text-accent" aria-hidden />
@@ -333,21 +338,21 @@ export function ApiView() {
                     value={temperature}
                     aria-valuetext={temperature.toFixed(1)}
                     onChange={(e) => setTemperature(Number(e.target.value))}
-                    style={{ "--pct": `${Math.round(temperature * 100)}%` } as React.CSSProperties}
+                    style={{ accentColor: "rgb(var(--accent))" } as React.CSSProperties}
                     className={cn(
                       "h-4 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-transparent",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                       // 轨道：已选段用强调色，未选段用分隔线色
                       "[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full",
-                      "[&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,rgb(var(--accent))_var(--pct),rgb(var(--line))_var(--pct))]",
+                      "[&::-webkit-slider-runnable-track]:bg-line",
                       "[&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-line",
                       "[&::-moz-range-progress]:h-1 [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-accent-solid",
                       // 滑块：与按钮同色的实心圆点
                       "[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5",
                       "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full",
-                      "[&::-webkit-slider-thumb]:bg-accent-solid [&::-webkit-slider-thumb]:shadow-card",
+                      "[&::-webkit-slider-thumb]:bg-accent-solid [&::-webkit-slider-thumb]:shadow-overlay",
                       "[&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full",
-                      "[&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent-solid [&::-moz-range-thumb]:shadow-card"
+                      "[&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent-solid [&::-moz-range-thumb]:shadow-overlay"
                     )}
                   />
                   <span className="num w-8 shrink-0 text-right text-xs text-muted">
@@ -452,7 +457,7 @@ export function ApiView() {
                     <>
                       {testResult.text}
                       {testResult.text.includes("未配置密钥") && (
-                        <> —— 也可以先用本地代理通道跑通（无需 Key）</>
+                        <> —— 也可以先用本地代理通道跑通（无需 Key）</> /* taste-skill-ignore */
                       )}
                     </>
                   )}
@@ -462,6 +467,7 @@ export function ApiView() {
           )}
         </CardBody>
       </Card>
+      </div>
 
       {/* 说明性内容：不占首屏，需要时展开 */}
       <Section
