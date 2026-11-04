@@ -70,7 +70,15 @@ export function RunCard({ caseId }: { caseId: string }) {
       <div className="flex items-center justify-between">
         <span className="font-medium">用例 {caseId}</span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted">{job.state}</span>
+          <span className="text-xs text-muted">
+            {job.state === "queued"
+              ? "排队中"
+              : job.state === "running"
+                ? "运行中"
+                : job.state === "awaiting_approval"
+                  ? "等待审批"
+                  : job.state}
+          </span>
           <button
             className="text-xs text-accent-ink disabled:opacity-40"
             disabled={!job.id}
@@ -85,7 +93,11 @@ export function RunCard({ caseId }: { caseId: string }) {
         </div>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded bg-line">
-        <div className="h-full bg-accent-solid transition-all" style={{ width: `${pct}%` }} />
+        {!done && (job.log?.length ?? 0) === 0 ? (
+          <div className="progress-indeterminate h-full bg-accent-solid" />
+        ) : (
+          <div className="h-full bg-accent-solid transition-all" style={{ width: `${pct}%` }} />
+        )}
       </div>
       {paramChips.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">

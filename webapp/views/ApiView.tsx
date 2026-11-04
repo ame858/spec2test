@@ -6,7 +6,6 @@ import {
   RefreshCw,
   Save,
   PlugZap,
-  Info,
   ArrowRight,
   CheckCircle2,
   TriangleAlert,
@@ -18,7 +17,6 @@ import {
   CardHead,
   Chip,
   Field,
-  Section,
   Term,
   inputCls,
   useToast,
@@ -462,27 +460,6 @@ export function ApiView() {
           )}
         </CardBody>
       </Card>
-
-      {/* 说明性内容：不占首屏，需要时展开 */}
-      <Section
-        title="三种通道怎么选"
-        icon={<Info className="h-4 w-4 shrink-0 text-accent" aria-hidden />}
-        className="mt-8"
-        bodyClassName="px-4 py-3"
-      >
-        <div className="max-w-[68ch] space-y-2 text-sm leading-relaxed text-muted">
-          <p>
-            <b className="text-ink">本地代理</b>：使用本机已配置的模型通道，<b className="text-ink">不需要填 Key</b>。模型列表无法自动获取时会显示内置目录。
-          </p>
-          <p>
-            <b className="text-ink">OpenAI 兼容</b>：适用于 DeepSeek、通义、vLLM 等任意兼容端点，填
-            Base URL 与 Key 后点「获取模型列表」即可。
-          </p>
-          <p>
-            <b className="text-ink">Anthropic 官方</b>：直连官方 API，需要 API Key。
-          </p>
-        </div>
-      </Section>
     </div>
   );
 }
