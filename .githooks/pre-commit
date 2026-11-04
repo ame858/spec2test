@@ -1,0 +1,18 @@
+#!/bin/sh
+# 本地提交闸门：类型检查 + 两域回归；设计检测器只提示不阻断。
+set -e
+cd "$(dirname "$0")/.."
+
+if [ -d webapp/node_modules ]; then
+  (cd webapp && npm run typecheck --silent)
+fi
+
+if [ -d data/gold_ir ]; then
+  python scripts/verify_domains.py
+fi
+
+IMPECCABLE="${IMPECCABLE_BIN:-D:/claude-home/.claude/skills/impeccable/scripts/impeccable.cmd}"
+if [ -x "$IMPECCABLE" ]; then
+  "$IMPECCABLE" detect --json webapp/app >/dev/null 2>&1 \
+    || echo "[design] 检测器有 findings：impeccable detect webapp/app"
+fi
