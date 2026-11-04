@@ -25,6 +25,13 @@ web_m2/
 # 本地会话/临时
 .claude/scheduled_tasks.lock
 
+# 凭据：任何位置都不入库
+.env
+.env.*
+*.pem
+*.key
+secret.bin
+
 # 工作流与设计工具的本地产物
 .scratch/
 .impeccable/

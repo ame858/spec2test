@@ -301,8 +301,10 @@ def list_convs():
         out.append({"id": c["id"], "title": c.get("title", ""),
                     "updated": c.get("updated", 0),
                     "turns": len(c.get("messages") or []),
+                    "pinned": bool(c.get("pinned")),
+                    "archived": bool(c.get("archived")),
                     "last_case": last_case})
-    out.sort(key=lambda x: -x["updated"])
+    out.sort(key=lambda x: (not x["pinned"], -x["updated"]))
     return out
 
 
@@ -1451,8 +1453,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             conv = _load_conv(m.group(1))
             if conv is None:
                 return self._json({"error": "conversation_not_found"}, 404)
+            changed = False
             if title:
                 conv["title"] = title[:40]
+                changed = True
+            if "pinned" in body:
+                conv["pinned"] = bool(body.get("pinned"))
+                changed = True
+            if "archived" in body:
+                conv["archived"] = bool(body.get("archived"))
+                changed = True
+            if changed:
                 _save_conv(conv)
         return self._json({"ok": True})
 

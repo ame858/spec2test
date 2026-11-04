@@ -24,6 +24,8 @@ export type Conversation = {
   title: string;
   updated?: number;
   turns?: number;
+  pinned?: boolean;
+  archived?: boolean;
   last_case?: string | null;
 };
 
@@ -192,6 +194,8 @@ export const api = {
   conversation: (id: string) => call<ConversationDetail>(`/api/conversations/${id}`),
   renameConversation: (id: string, title: string) =>
     call<{ ok: true }>(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify({ title }) }),
+  updateConversation: (id: string, patch: { pinned?: boolean; archived?: boolean }) =>
+    call<{ ok: true }>(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteConversation: (id: string) =>
     call<{ ok: true }>(`/api/conversations/${id}`, { method: "DELETE" }),
   appendMessage: (id: string, role: Message["role"], content: string) =>

@@ -142,8 +142,7 @@ button {
 }
 
 ::selection {
-  background: rgb(var(--accent) / 0.22);
-  color: rgb(var(--ink));
+  background: rgb(var(--accent) / 0.28);
 }
 
 html {

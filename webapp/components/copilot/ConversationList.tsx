@@ -25,6 +25,7 @@ export function ConversationList({ onCollapse }: { onCollapse?: () => void }) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = () => {
     api
@@ -81,17 +82,47 @@ export function ConversationList({ onCollapse }: { onCollapse?: () => void }) {
     window.dispatchEvent(new Event("s2t-conv-changed"));
   };
 
+  const togglePin = async (c: Conversation) => {
+    setMenuId(null);
+    try {
+      await api.updateConversation(c.id, { pinned: !c.pinned });
+    } catch {
+      return;
+    }
+    window.dispatchEvent(new Event("s2t-conv-changed"));
+  };
+
+  const toggleArchive = async (c: Conversation) => {
+    setMenuId(null);
+    try {
+      await api.updateConversation(c.id, { archived: !c.archived });
+    } catch {
+      return;
+    }
+    window.dispatchEvent(new Event("s2t-conv-changed"));
+  };
+
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const visible = convs.filter((c) => !q || (c.title || "未命名").toLowerCase().includes(q));
+    const pinned = visible.filter((c) => c.pinned && !c.archived);
+    const normal = visible.filter((c) => !c.pinned && !c.archived);
+    const archived = visible.filter((c) => c.archived);
     const buckets: Record<string, Conversation[]> = {};
-    convs
-      .filter((c) => !q || (c.title || "未命名").toLowerCase().includes(q))
-      .forEach((c) => {
-        const key = c.id === active ? "今天" : groupOf(c.updated);
-        (buckets[key] ||= []).push(c);
-      });
-    return ORDER.filter((k) => buckets[k]?.length).map((k) => [k, buckets[k]] as const);
-  }, [convs, query, active]);
+    normal.forEach((c) => {
+      const key = c.id === active ? "今天" : groupOf(c.updated);
+      (buckets[key] ||= []).push(c);
+    });
+    const out: [string, Conversation[]][] = [];
+    if (pinned.length) out.push(["置顶", pinned]);
+    ORDER.filter((k) => k !== "置顶" && buckets[k]?.length).forEach((k) =>
+      out.push([k, buckets[k]])
+    );
+    if (showArchived && archived.length) out.push(["已归档", archived]);
+    return out;
+  }, [convs, query, active, showArchived]);
+
+  const archivedCount = convs.filter((c) => c.archived).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -184,7 +215,21 @@ export function ConversationList({ onCollapse }: { onCollapse?: () => void }) {
                     ···
                   </button>
                   {menuId === c.id && (
-                    <div className="absolute right-0 top-8 z-10 rounded-lg border border-line bg-canvas py-1 shadow-[0_8px_24px_rgb(0_0_0/0.10)]">
+                    <div className="absolute right-0 top-8 z-10 w-32 rounded-lg border border-line bg-canvas py-1 shadow-[0_8px_24px_rgb(0_0_0/0.10)]">
+                      <button
+                        type="button"
+                        onClick={() => togglePin(c)}
+                        className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-ink hover:bg-surface"
+                      >
+                        {c.pinned ? "取消置顶" : "置顶"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleArchive(c)}
+                        className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-ink hover:bg-surface"
+                      >
+                        {c.archived ? "取消归档" : "归档"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => remove(c.id)}
@@ -200,6 +245,18 @@ export function ConversationList({ onCollapse }: { onCollapse?: () => void }) {
           </section>
         ))}
       </div>
+
+      {archivedCount > 0 && (
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className="w-full rounded-full px-2 py-1 text-left text-[11px] text-muted transition-colors hover:bg-surface hover:text-ink"
+          >
+            {showArchived ? "隐藏已归档" : `已归档 ${archivedCount}`}
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 border-t border-line/70 px-3 py-2.5">
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-xs font-medium text-muted">
