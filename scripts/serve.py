@@ -45,6 +45,41 @@ CATALOG_PROXY = ["claude-sonnet-4-6[1M]", "claude-opus-4-8[1M]", "claude-haiku-4
 NULLABLE_FIELDS = {"L1", "L3", "status", "verdict"}
 DENIED_BASENAMES = {"settings.json", "secret.bin"}
 
+LOG_DIR = os.path.join(ROOT, "data", "logs")
+LOG_PATH = os.path.join(LOG_DIR, "serve.log")
+
+
+class _Tee:
+    """同时写终端与日志文件，逐行 flush，便于排查后台服务。"""
+
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, s):
+        for st in self._streams:
+            try:
+                st.write(s)
+                st.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        for st in self._streams:
+            try:
+                st.flush()
+            except Exception:
+                pass
+
+
+def _install_log_tee():
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        f = open(LOG_PATH, "a", encoding="utf-8", buffering=1)
+    except Exception:
+        return
+    sys.stdout = _Tee(sys.stdout, f)
+    sys.stderr = _Tee(sys.stderr, f)
+
 GUIDE_FALLBACK = {
     "rrc": ("你好！我可以把 3GPP §6.7 的 NR NTN 测试条款编译成测试意图。"
             "你可以直接给用例号（如 6.7.1.3），或描述场景（如卫星小区被禁止、GNSS 禁用、Sintrasearch、PLMN 重选）。"),
@@ -1500,6 +1535,7 @@ def main():
     args = ap.parse_args()
 
     os.chdir(ROOT)
+    _install_log_tee()
     if not os.path.isdir(os.path.join(ROOT, "data")):
         print("[warn] 未找到 data/：仅能使用 results/ 快照")
 
