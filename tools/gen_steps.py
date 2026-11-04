@@ -23,7 +23,7 @@ def _prompt(ctx):
                       ensure_ascii=False)
 
 
-def _defects(steps):
+def _defects(steps, actors=VALID_ACTOR, dirs=VALID_DIR):
     bad = []
     for i, s in enumerate(steps):
         if not isinstance(s, dict):
@@ -31,24 +31,27 @@ def _defects(steps):
             continue
         if not isinstance(s.get("st"), int):
             bad.append(f"steps[{i}].st 缺失或非整数")
-        if s.get("actor") not in VALID_ACTOR:
-            bad.append(f"steps[{i}].actor 必须是 SS 或 UE")
-        if s.get("direction") not in VALID_DIR:
-            bad.append(f"steps[{i}].direction 必须是 S->U 或 U->S")
+        if s.get("actor") not in actors:
+            bad.append(f"steps[{i}].actor 必须是 {' 或 '.join(actors)}")
+        if s.get("direction") not in dirs:
+            bad.append(f"steps[{i}].direction 必须是 {' 或 '.join(dirs)}")
         if not isinstance(s.get("message"), str):
             bad.append(f"steps[{i}].message 必须是字符串")
     return bad
 
 
-def generate_steps(ctx, repairs=1):
-    text, stop = llm.complete([{"role": "user", "content": _prompt(ctx)}], system=SYSTEM)
+def generate_steps(ctx, repairs=1, profile=None):
+    system = (profile or {}).get("steps_system") or SYSTEM
+    actors = tuple((profile or {}).get("actors") or VALID_ACTOR)
+    dirs = tuple((profile or {}).get("directions") or VALID_DIR)
+    text, stop = llm.complete([{"role": "user", "content": _prompt(ctx)}], system=system)
     ir = llm.extract_json(text)
     steps = (ir or {}).get("steps") if isinstance(ir, dict) else None
     used = 0
     while True:
         if not isinstance(steps, list) or not steps:
             return [], {"error": f"parse_failed(stop={stop},len={len(text)})", "repairs": used}
-        bad = _defects(steps)
+        bad = _defects(steps, actors, dirs)
         if not bad or used >= repairs:
             return steps, {"stop": stop, "defects": bad, "repairs": used}
         used += 1
@@ -56,7 +59,7 @@ def generate_steps(ctx, repairs=1):
                + "\n\n原始输出：\n" + text[:4000])
         text, stop = llm.complete([{"role": "user", "content": _prompt(ctx)},
                                    {"role": "assistant", "content": text[:4000]},
-                                   {"role": "user", "content": fix}], system=SYSTEM)
+                                   {"role": "user", "content": fix}], system=system)
         ir = llm.extract_json(text)
         steps = (ir or {}).get("steps") if isinstance(ir, dict) else None
 

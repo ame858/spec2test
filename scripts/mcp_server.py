@@ -160,7 +160,10 @@ def main():
     ap = argparse.ArgumentParser(description="Spec2Test MCP server（stdio）")
     ap.add_argument("--allow-model", action="store_true",
                     help="额外暴露调用模型的工具")
+    ap.add_argument("--domain", default=os.environ.get("VERISPEC_DOMAIN", "rrc"),
+                    help="域：rrc（默认）或 ml")
     a = ap.parse_args()
+    stage_tools.set_domain(a.domain)
 
     for line in sys.stdin:
         line = line.strip()

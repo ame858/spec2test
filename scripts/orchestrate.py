@@ -147,7 +147,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("case")
     ap.add_argument("--max-steps", type=int, default=8, help="工具调用预算")
+    ap.add_argument("--domain", default=os.environ.get("VERISPEC_DOMAIN", "rrc"),
+                    help="域：rrc（默认）或 ml")
     a = ap.parse_args()
+    stage_tools.set_domain(a.domain)
 
     t0 = time.time()
     state = State(a.case)

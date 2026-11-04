@@ -27,7 +27,7 @@ def norm_ie(s):
     return re.sub(r"[^a-z0-9]+", "", s)
 
 
-def l1_ok(ir):
+def l1_ok(ir, actors=("SS", "UE"), dirs=("S->U", "U->S")):
     """结构合法率：步骤可解析为 IR（主体/方向/消息字段类型合法）。
     注意：空 message 仍算结构合法；消息质量看 step_msg_coverage。"""
     if not isinstance(ir, dict) or "steps" not in ir:
@@ -36,8 +36,8 @@ def l1_ok(ir):
     if not steps:
         return 0.0
     good = sum(1 for s in steps
-               if s.get("actor") in ("SS", "UE")
-               and s.get("direction") in ("S->U", "U->S")
+               if s.get("actor") in actors
+               and s.get("direction") in dirs
                and isinstance(s.get("message"), str))
     return round(good / len(steps), 3)
 

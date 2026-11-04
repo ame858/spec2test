@@ -24,3 +24,8 @@ web_m2/
 
 # 本地会话/临时
 .claude/scheduled_tasks.lock
+
+# 工作流与设计工具的本地产物
+.scratch/
+.impeccable/
+webapp/.impeccable/

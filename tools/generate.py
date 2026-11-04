@@ -15,10 +15,12 @@ import gen_ie
 SYMBOLS = os.path.join(ROOT, "data", "symbols", "rrc_symbols.json")
 
 
-def mock_ir(ctx):
+def mock_ir(ctx, profile=None):
     tp = re.findall(r"\((\d+)\)", ctx["test_purpose"]) or ["1"]
-    steps = [{"st": k, "actor": "SS", "action": "transmit", "message": "",
-              "direction": "S->U", "tp_ref": [int(i)]} for k, i in enumerate(tp, 1)]
+    actors = (profile or {}).get("actors") or ("SS", "UE")
+    dirs = (profile or {}).get("directions") or ("S->U", "U->S")
+    steps = [{"st": k, "actor": actors[0], "action": "transmit", "message": "",
+              "direction": dirs[0], "tp_ref": [int(i)]} for k, i in enumerate(tp, 1)]
     return {"case_id": ctx["case_id"], "steps": steps, "messages": []}
 
 

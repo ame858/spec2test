@@ -50,11 +50,15 @@ def _input_text(ctx):
                     ("test_purpose", "conformance_requirements", "pre_test_conditions"))
 
 
-def _explicit_positions(text):
-    """输入里显式出现的 SIB / RRC 消息名及首次位置。"""
+def _explicit_positions(text, table=None, generic=False):
+    """输入里显式出现的消息名及首次位置。generic=True 时按符号表做全名匹配。"""
     found = [(m.start(), f"SIB{int(m.group(1))}") for m in SIB_RE.finditer(text)]
     found += [(m.start(), f"SIB{int(m.group(1))}") for m in SIBTYPE_RE.finditer(text)]
     found += [(m.start(), m.group(1)) for m in RRC_RE.finditer(text)]
+    if generic and table:
+        for name in table:
+            pat = r"(?<![A-Za-z0-9])" + re.escape(name) + r"(?![A-Za-z0-9])"
+            found += [(m.start(), name) for m in re.finditer(pat, text)]
     return found
 
 
@@ -68,21 +72,21 @@ def distinct_messages(steps):
     return out
 
 
-def messages_from_inputs(ctx):
+def messages_from_inputs(ctx, table=None, generic=False):
     """只读输入侧三个字段，抽取实际出现的消息/SIB 名，按首次出现排序去重。"""
     out, seen = [], set()
-    for _, name in sorted(_explicit_positions(_input_text(ctx))):
+    for _, name in sorted(_explicit_positions(_input_text(ctx), table, generic)):
         if name not in seen:
             seen.add(name)
             out.append(name)
     return out
 
 
-def candidate_messages(ctx, symbols_path):
+def candidate_messages(ctx, symbols_path, profile=None):
     """候选消息：显式消息名优先，再用符号表把输入中出现的字段反查回所属消息。"""
     table, _, _ = load_symbols(symbols_path)
     text = _input_text(ctx)
-    explicit = messages_from_inputs(ctx)
+    explicit = messages_from_inputs(ctx, table, bool(profile and profile.get("generic_message_names")))
 
     field_index = {}
     for msg, meta in table.items():
@@ -116,7 +120,7 @@ def candidate_messages(ctx, symbols_path):
     return out
 
 
-def generate_ie(ctx, steps, message, symbols_path, feedback=None, hint=""):
+def generate_ie(ctx, steps, message, symbols_path, feedback=None, hint="", system=None):
     msgs, gids, _ = load_symbols(symbols_path)
     skeleton = msgs.get(message, {}).get("fields", [])[:60]
     payload = {
@@ -128,7 +132,7 @@ def generate_ie(ctx, steps, message, symbols_path, feedback=None, hint=""):
         "validation_errors": feedback or [],
     }
     text, stop = llm.complete([{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-                              system=SYSTEM + ("\n\n修复时必须参考以下技能说明：\n" + hint if hint else ""))
+                              system=(system or SYSTEM) + ("\n\n修复时必须参考以下技能说明：\n" + hint if hint else ""))
     ir = llm.extract_json(text)
     if not isinstance(ir, dict):
         return {"message": message, "ies": [], "_error": f"parse_failed(stop={stop})"}
@@ -153,20 +157,22 @@ def _r2_messages(violations):
     return bad
 
 
-def generate_all(ctx, steps, symbols_path, repairs=1, messages=None):
+def generate_all(ctx, steps, symbols_path, repairs=1, messages=None, profile=None):
     """产品入口：候选为空则弃权；R2 失败时带违规清单重生成。
 
     messages 为用户勾选的候选子集（None/空 = 全部），用于把生成范围交给人选。
+    profile 为域配置；None 时沿用 RRC 默认行为。
     """
-    cand = candidate_messages(ctx, symbols_path)
+    cand = candidate_messages(ctx, symbols_path, profile)
     if messages:
         cand = [m for m in cand if m in set(messages)]
     if not cand:
         return {"status": "abstained",
                 "reason": "inputs contain no message/SIB names",
                 "candidates": [], "messages": [], "calls": 0}
+    system = (profile or {}).get("ie_system")
     table = json.load(open(symbols_path, encoding="utf-8"))
-    msgs = [generate_ie(ctx, steps, m, symbols_path) for m in cand]
+    msgs = [generate_ie(ctx, steps, m, symbols_path, system=system) for m in cand]
     calls, used = len(cand), 0
     for _ in range(max(0, repairs)):
         violations = validate.validate(
@@ -179,7 +185,7 @@ def generate_all(ctx, steps, symbols_path, repairs=1, messages=None):
                         if (m.get("message") or "") == msg), None)
             if idx is None:
                 continue
-            repaired = generate_ie(ctx, steps, msg, symbols_path, feedback=feedback)
+            repaired = generate_ie(ctx, steps, msg, symbols_path, feedback=feedback, system=system)
             # 修复解析失败（空 ies）时保留原消息，避免越修越空
             if repaired.get("ies") or not (msgs[idx].get("ies") or []):
                 msgs[idx] = repaired

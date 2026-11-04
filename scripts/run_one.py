@@ -19,11 +19,13 @@ ROOT = os.path.dirname(HERE)
 TOOLS = os.path.join(ROOT, "tools")
 sys.path.insert(0, TOOLS)
 from ir import parse_test_purpose as parse_tp
+import domains as domain_registry
 import stage_tools
 
 SYMBOLS = os.path.join(ROOT, "data", "symbols", "rrc_symbols.json")
 BENCH = os.path.join(ROOT, "data", "benchmark", "v0")
 CTX = os.path.join(ROOT, "data", "ctx")
+PROFILE = None
 OUT = os.path.join(ROOT, "data", "out")
 OUT_REJECTED = os.path.join(ROOT, "data", "out_rejected")
 GOLD_IE = os.path.join(ROOT, "data", "ir", "ie")
@@ -174,14 +176,16 @@ def finish(case, ir, a, sym_path):
             json.dump(ir_out, f, ensure_ascii=False, indent=2)
         if verdict == "reject":
             emit("verdict", "rejected", "已拒收，未写入结果",
-                 {"written_to": "data/out_rejected/%s.json" % case})
+                 {"written_to": os.path.relpath(os.path.join(target, case + ".json"), ROOT)})
         else:
             emit("verdict", "pass", "通过，产物已写入结果",
-                 {"written_to": "data/out/%s.json" % case})
+                 {"written_to": os.path.relpath(os.path.join(target, case + ".json"), ROOT)})
 
     try:
         import score
-        l1 = score.l1_ok(ir)
+        prof = PROFILE or {}
+        l1 = score.l1_ok(ir, prof.get("actors") or ("SS", "UE"),
+                         prof.get("directions") or ("S->U", "U->S"))
         gold_path = os.path.join(GOLD_IE, case + ".json")
         gold = score.gold_leaf_ies(gold_path) if os.path.exists(gold_path) else []
         gen = []
@@ -225,7 +229,15 @@ def main():
                     help="只用这些候选消息生成 IE（逗号分隔）；空=全部")
     ap.add_argument("--skills", default="",
                     help="随修复提示带入的技能名（逗号分隔）")
+    ap.add_argument("--domain", default=os.environ.get("VERISPEC_DOMAIN", "rrc"),
+                    help="域：rrc（默认）或 ml")
     a = ap.parse_args()
+    global BENCH, CTX, SYMBOLS, PROFILE, OUT, OUT_REJECTED
+    PROFILE = domain_registry.get(a.domain)
+    BENCH, CTX, SYMBOLS = PROFILE["bench"], PROFILE["ctx"], PROFILE["symbols"]
+    if PROFILE["id"] != "rrc":
+        OUT = os.path.join(ROOT, "data", "out", PROFILE["id"])
+        OUT_REJECTED = os.path.join(ROOT, "data", "out_rejected", PROFILE["id"])
     case = a.case
     if a.dry_run and not a.force_write:
         a.no_write = True
@@ -283,7 +295,7 @@ def main():
         cand = []
     else:
         try:
-            cand = gen_ie.candidate_messages(ctx, sym_path)
+            cand = gen_ie.candidate_messages(ctx, sym_path, PROFILE)
         except Exception as e:
             cand = []
             emit("candidates", "failed", "候选抽取异常：%s" % e)
@@ -331,7 +343,7 @@ def main():
     try:
         if a.dry_run:
             import generate
-            ir = generate.mock_ir(ctx)
+            ir = generate.mock_ir(ctx, PROFILE)
             ir["status"] = "generated"
             if a.mode == "steps":
                 ir["messages"] = []
@@ -339,7 +351,7 @@ def main():
                  {"steps": len(ir.get("steps") or []), "calls": 0})
         elif a.mode == "steps":
             import gen_steps
-            steps, meta = gen_steps.generate_steps(ctx, repairs=1)
+            steps, meta = gen_steps.generate_steps(ctx, repairs=1, profile=PROFILE)
             if meta.get("error"):
                 emit("generate", "failed", "生成失败：%s" % meta["error"])
                 emit("validate", "skipped", "上游失败")
@@ -354,7 +366,7 @@ def main():
                   "seconds": round(time.time() - t0, 2)})
         else:
             import gen_steps
-            steps, meta = gen_steps.generate_steps(ctx, repairs=1)
+            steps, meta = gen_steps.generate_steps(ctx, repairs=1, profile=PROFILE)
             if meta.get("error"):
                 # 解析失败不能当成“生成完成 0 步”继续往下走
                 emit("generate", "failed", "生成失败：%s" % meta["error"])
@@ -362,7 +374,7 @@ def main():
                 emit("score", "skipped", "上游失败")
                 return 1
             ie = gen_ie.generate_all(ctx, steps, sym_path,
-                                     repairs=0, messages=cand or None)
+                                     repairs=0, messages=cand or None, profile=PROFILE)
             ir = {"case_id": case, "tp": parse_tp(ctx.get("test_purpose", "")),
                   "steps": steps, "messages": ie["messages"],
                   "status": ie["status"], "reason": ie.get("reason", ""),

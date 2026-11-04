@@ -29,6 +29,7 @@ import secret_store
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "tools"))     # 阶段工具与 MCP 共用实现
+import domains as domain_registry
 SETTINGS = os.path.join(ROOT, "data", "settings.json")
 CONV_DIR = os.path.join(ROOT, "data", "conversations")
 RUNS_FILE = os.path.join(ROOT, "data", "runs.jsonl")
@@ -44,10 +45,12 @@ CATALOG_PROXY = ["claude-sonnet-4-6[1M]", "claude-opus-4-8[1M]", "claude-haiku-4
 NULLABLE_FIELDS = {"L1", "L3", "status", "verdict"}
 DENIED_BASENAMES = {"settings.json", "secret.bin"}
 
-GUIDE_FALLBACK = (
-    "你好！我可以把 3GPP §6.7 的 NR NTN 测试条款编译成测试意图。"
-    "你可以直接给用例号（如 6.7.1.3），或描述场景（如卫星小区被禁止、GNSS 禁用、Sintrasearch、PLMN 重选）。"
-)
+GUIDE_FALLBACK = {
+    "rrc": ("你好！我可以把 3GPP §6.7 的 NR NTN 测试条款编译成测试意图。"
+            "你可以直接给用例号（如 6.7.1.3），或描述场景（如卫星小区被禁止、GNSS 禁用、Sintrasearch、PLMN 重选）。"),
+    "ml": ("你好！当前是 ML 域，我可以把 3GPP TS 28.105 的 ML 模型测试条款编译成测试意图。"
+           "你可以给用例号（如 ml.1）。"),
+}
 
 PROVIDERS = ("proxy", "openai", "anthropic")
 DEFAULTS = {
@@ -320,6 +323,21 @@ def append_message(cid, role, content, **extra):
         return msg
 
 
+def update_last_assistant_message(cid, content):
+    """用完整回答替换最近一条 assistant 摘要；保留 verdict/stages 等结构化字段。"""
+    with _conv_lock:
+        conv = _load_conv(cid)
+        if conv is None:
+            return None
+        for m in reversed(conv["messages"]):
+            if m.get("role") == "assistant":
+                m["content"] = content
+                m.pop("summary", None)
+                _save_conv(conv)
+                return m
+        return None
+
+
 def update_conv_state(cid, **kw):
     """更新会话工作记忆：active_case / last_job_id / last_verdict 等。"""
     with _conv_lock:
@@ -452,8 +470,10 @@ def _score_of(cid):
     return next((r for r in report if r.get("case") == cid), None)
 
 
-def _case_title(cid):
-    ctx = read_json("data/ctx/%s.json" % cid, "results/ctx/%s.json" % cid) or {}
+def _case_title(cid, domain="rrc"):
+    d = domain_registry.get(domain)
+    rel = os.path.relpath(os.path.join(d["ctx"], cid + ".json"), ROOT)
+    ctx = read_json(rel, "results/ctx/%s.json" % cid) or {}
     return (ctx.get("title") or "").strip()
 
 
@@ -465,7 +485,7 @@ def _explain_of(cid):
 def _plain_summary(job, verdict):
     """一句白话摘要：智能解读的 headline 只在判定一致时复用，失败任务单独说明。"""
     if job.get("state") == "failed" or verdict == "failed":
-        title = _case_title(job.get("case"))
+        title = _case_title(job.get("case"), job.get("domain", "rrc"))
         return "运行失败：%s" % (title or job.get("case") or "未知用例")
     explain = _explain_of(job.get("case"))
     headline = ((explain or {}).get("headline") or "").strip()
@@ -473,35 +493,43 @@ def _plain_summary(job, verdict):
         return headline
     label = {"pass": "通过", "reject": "已拒收", "abstained": "已弃权",
              "canceled": "已取消", "failed": "运行失败"}.get(verdict, "运行完成")
-    title = _case_title(job.get("case"))
+    title = _case_title(job.get("case"), job.get("domain", "rrc"))
     return "%s：%s" % (label, title or job.get("case"))
 
 
-def list_cases():
+def list_cases(domain="rrc"):
+    d = domain_registry.get(domain)
     report = read_json("data/score/report.json", "results/score/report.json") or []
     by = {r.get("case"): r for r in report}
-    bench_dir = os.path.join(ROOT, "data", "benchmark", "v0")
+    bench_dir = d["bench"]
     cases = []
     if os.path.isdir(bench_dir):
         for n in sorted(os.listdir(bench_dir)):
-            if not re.match(r"^6\..*\.json$", n):
+            if not n.endswith(".json"):
+                continue
+            if d["id"] == "rrc" and not re.match(r"^6\.", n):
                 continue
             cid = n[:-5]
-            b = read_json("data/benchmark/v0/" + n) or {}
+            rel = os.path.relpath(os.path.join(bench_dir, n), ROOT)
+            b = read_json(rel) or {}
             r = by.get(cid, {})
             cases.append({"case": cid, "title": b.get("title", ""),
                           "status": r.get("status", "unknown"),
-                          "gold_ies": r.get("gold_ie_n", 0)})
+                          "gold_ies": r.get("gold_ie_n", 0), "domain": d["id"]})
     if not cases:
         cases = [{"case": r.get("case"), "title": "", "status": r.get("status"),
-                  "gold_ies": r.get("gold_ie_n", 0)} for r in report]
+                  "gold_ies": r.get("gold_ie_n", 0), "domain": d["id"]} for r in report]
     return cases
 
 
-def build_guide_system(cases):
+def build_guide_system(cases, domain="rrc"):
+    d = domain_registry.get(domain)
+    scope = {"rrc": "3GPP TS 38.523-1 §6.7 中以下 NR NTN 测试用例",
+             "ml": "3GPP TS 28.105 §6.2c 中以下 ML 模型测试用例"}.get(
+                 d["id"], "%s 中以下测试用例" % d["label"])
     lines = ["%s — %s" % (c.get("case"), c.get("title") or "") for c in cases]
     return (
-        "你是 Spec2Test 的输入理解助手。系统唯一能处理的是 3GPP TS 38.523-1 §6.7 中以下 NR NTN 测试用例：\n"
+        "你是 Spec2Test 的输入理解助手。系统唯一能处理的是 " + scope + "：\n"
         + "\n".join(lines)
         + "\n\n用户可能只是打招呼、问你能做什么、描述一个测试场景、给用例号，或说得含糊。"
         "请判断用户意图，只输出一个 JSON 对象（不要代码围栏）：\n"
@@ -509,28 +537,30 @@ def build_guide_system(cases):
         '{"action":"run","case":"<id>","say":"<1-2 句白话，说明这条用例在测什么，不要只说‘处理 X’>"}\n'
         "- 否则输出 "
         '{"action":"reply","say":"<简体中文，最多 3 句；先白话回答，再出现术语时顺带解释；'
-        '问能做什么就给 1-2 个具体示例；范围外就说明只覆盖 §6.7 的 8 个用例；含糊就追问一个最关键的点>"}\n'
+        '问能做什么就给 1-2 个具体示例；范围外就说明只覆盖上面列出的用例；含糊就追问一个最关键的点>"}\n'
         "规则：面向没有射频背景的读者；绝不编造不存在的用例号；不承诺范围外能力；语气自然，不要像报错。"
     )
 
 
-def case_stages(cid):
+def case_stages(cid, domain="rrc"):
     stages = []
-    b = read_json("data/benchmark/v0/%s.json" % cid)
+    d = domain_registry.get(domain)
+    b = read_json(os.path.relpath(os.path.join(d["bench"], cid + ".json"), ROOT))
     stages.append({"stage": "ingest", "status": "ok" if b else "unavailable",
                    "summary": (b or {}).get("title", "无基准数据（快照不含该阶段）")[:120],
                    "detail": {k: len((b or {}).get("inputs", {}).get(k) or "")
                               for k in ("test_purpose", "conformance_requirements",
                                         "pre_test_conditions")} if b else {}})
 
-    ctx = read_json("data/ctx/%s.json" % cid)
+    ctx = read_json(os.path.relpath(os.path.join(d["ctx"], cid + ".json"), ROOT))
     stages.append({"stage": "context", "status": "ok" if ctx else "unavailable",
                    "summary": "上下文裁剪" if ctx else "快照中不含该阶段数据",
                    "detail": {k: len((ctx or {}).get(k) or "") for k in
                               ("test_purpose", "conformance_requirements",
                                "pre_test_conditions")} if ctx else {}})
 
-    out = read_json("data/out/%s.json" % cid)
+    out_base = os.path.join(ROOT, "data", "out") if d["id"] == "rrc" else os.path.join(ROOT, "data", "out", d["id"])
+    out = read_json(os.path.relpath(os.path.join(out_base, cid + ".json"), ROOT))
     abstained = bool(out) and (out.get("status") == "abstained" or not out.get("messages"))
     cands = ((out or {}).get("_stage2") or {}).get("candidates") or []
     stages.append({"stage": "candidates", "status": ("skipped" if abstained else "ok") if out else "unavailable",
@@ -560,6 +590,8 @@ def case_stages(cid):
 
     vrep = read_json("data/validate/report.json", "results/validate/report.json") or []
     hit = next((x for x in vrep if x.get("case_id") == cid), None)
+    if hit is None and out is not None:
+        hit = {"violations": out.get("violations") or []}
     stages.append({"stage": "validate", "status": "ok" if hit is not None else "unavailable",
                    "summary": ("无违规" if hit is not None and not hit.get("violations")
                                else "违规 %d 条" % len(hit.get("violations") or []))
@@ -568,6 +600,11 @@ def case_stages(cid):
 
     rep = {r.get("case"): r for r in (read_json("data/score/report.json", "results/score/report.json") or [])}
     r = rep.get(cid)
+    if r is None and out is not None:
+        import score as score_mod
+        r = {"L1": score_mod.l1_ok(out, d["actors"], d["directions"]),
+             "L3_recall": None, "gold_ie_n": 0,
+             "calls": (out.get("_stage2") or {}).get("calls")}
     stages.append({"stage": "score", "status": "ok" if r else "unavailable",
                    "summary": ("L1=%.3f  L3=%s" % (r.get("L1", 0), r.get("L3_recall")))
                    if r else "快照中不含该阶段数据",
@@ -647,12 +684,13 @@ def norm_run_options(raw):
     }
 
 
-def start_job(cid, dry_run=False, conversation_id=None, hitl=False, options=None):
+def start_job(cid, dry_run=False, conversation_id=None, hitl=False, options=None, domain="rrc"):
     options = norm_run_options(options)
     jid = uuid.uuid4().hex[:12]
     with _jobs_lock:
         _jobs[jid] = {"id": jid, "state": "queued", "stage": "", "log": [], "result": None,
                       "created": time.time(), "updated": time.time(), "case": cid,
+                      "domain": domain,
                       "conversation_id": conversation_id, "hitl": bool(hitl),
                       "options": options,
                       "approval": None,
@@ -675,8 +713,10 @@ def start_job(cid, dry_run=False, conversation_id=None, hitl=False, options=None
         last_t = time.time()
         if options["engine"] == "agent":
             cmd = [sys.executable, ORCHESTRATE, cid, "--max-steps", str(AGENT_BUDGET)]
+            cmd.extend(["--domain", domain])
         else:
             cmd = [sys.executable, RUN_ONE, cid]
+            cmd.extend(["--domain", domain])
             if dry_run:
                 cmd.append("--dry-run")
             if hitl:
@@ -1089,7 +1129,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                "runs_last_24h": last24,
                                "recent_failures": failures})
         if path == "/api/cases":
-            return self._json(list_cases())
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            domain = (q.get("domain", ["rrc"])[0] or "rrc").strip()
+            try:
+                domain_registry.get(domain)
+            except KeyError:
+                return self._json({"error": "unknown_domain"}, 400)
+            return self._json(list_cases(domain))
         if path == "/api/trace/tools":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             try:
@@ -1122,9 +1168,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if source != "live" and cases:
                 source = "snapshot"
             return self._json({"cases": sorted(cases), "source": source})
-        m = re.match(r"^/api/case/([0-9.]+)$", path)
+        m = re.match(r"^/api/case/([A-Za-z0-9._-]+)$", path)
         if m:
-            return self._json({"case": m.group(1), "stages": case_stages(m.group(1))})
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            domain = (q.get("domain", ["rrc"])[0] or "rrc").strip()
+            return self._json({"case": m.group(1), "domain": domain,
+                               "stages": case_stages(m.group(1), domain)})
         m = re.match(r"^/api/job/([0-9a-f]+)/stream$", path)
         if m:
             return self._stream_job(m.group(1))
@@ -1219,15 +1268,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/chat":
             body = self._body()
             msg = (body.get("message") or "").strip()[:800]
-            fallback = {"action": "reply", "say": GUIDE_FALLBACK, "source": "fallback"}
+            domain = (body.get("domain") or "rrc").strip()
+            fallback_say = GUIDE_FALLBACK.get(domain, GUIDE_FALLBACK["rrc"])
+            fallback = {"action": "reply", "say": fallback_say, "source": "fallback"}
             if not msg:
                 return self._json({"action": "reply", "say": "请告诉我你想测哪个场景或用例号。",
                                    "source": "fallback"})
             s = load_settings()
             if not credential_ok(s):
                 return self._json(fallback)
-            cases = list_cases()
-            system = build_guide_system(cases)
+            cases = list_cases(domain)
+            system = build_guide_system(cases, domain)
             conv_id = (body.get("conversation_id") or "").strip() or None
             mem = (conversation_context(conv_id)
                    if conv_id and _load_conv(conv_id) else {"messages": [], "state": {}})
@@ -1274,7 +1325,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                            "say": say or ("好的，处理 %s。" % cid),
                                            "model": payload.get("model")})
                     return self._json(dict(fallback, model=payload.get("model")))
-                return self._json({"action": "reply", "say": say or GUIDE_FALLBACK,
+                return self._json({"action": "reply", "say": say or fallback_say,
                                    "model": payload.get("model"),
                                    "source": "llm" if say else "fallback"})
             except subprocess.TimeoutExpired:
@@ -1337,7 +1388,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cid = (body.get("case") or "").strip()
             if not cid:
                 return self._json({"error": "missing_case"}, 400)
-            if not re.match(r"^6\.7\.1\.\d{1,2}$", cid) or cid not in {c.get("case") for c in list_cases()}:
+            domain = (body.get("domain") or "rrc").strip()
+            try:
+                domain_registry.get(domain)
+            except KeyError:
+                return self._json({"error": "unknown_domain"}, 400)
+            if cid not in {c.get("case") for c in list_cases(domain)}:
                 return self._json({"error": "unknown_case"}, 400)
             s = load_settings()
             if not credential_ok(s):
@@ -1362,9 +1418,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return self._json({"error": "too_many_runs"}, 429)
                 instruction = (body.get("instruction") or "").strip()
                 if conv_id and instruction:
-                    append_message(conv_id, "user", instruction)
+                    prev = _load_conv(conv_id) or {}
+                    msgs = prev.get("messages") or []
+                    last_user = next((m for m in reversed(msgs) if m.get("role") == "user"), None)
+                    if not (last_user and last_user.get("content") == instruction):
+                        append_message(conv_id, "user", instruction)
                 jid = start_job(cid, bool(body.get("dry_run")), conv_id,
-                                hitl=bool(body.get("hitl")), options=opts)
+                                hitl=bool(body.get("hitl")), options=opts, domain=domain)
             return self._json({"job_id": jid, "options": opts})
         return self._json({"error": "not_found"}, 404)
 
@@ -1372,6 +1432,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self._origin_ok():
             return self._json({"error": "bad_origin"}, 403)
         path = urllib.parse.urlparse(self.path).path
+        m = re.match(r"^/api/conversations/([0-9a-f]{8})/messages/last$", path)
+        if m:
+            body = self._body()
+            content = (body.get("content") or "").strip()
+            if not content:
+                return self._json({"error": "missing_content"}, 400)
+            msg = update_last_assistant_message(m.group(1), content)
+            if msg is None:
+                return self._json({"error": "message_not_found"}, 404)
+            return self._json({"ok": True, "at": msg.get("at")})
         m = re.match(r"^/api/conversations/([0-9a-f]{8})$", path)
         if not m:
             return self._json({"error": "not_found"}, 404)

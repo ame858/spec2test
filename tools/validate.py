@@ -43,10 +43,12 @@ PAREN = re.compile(r"\([^)]*\)")
 SIB = re.compile(r"^SIB\s?(\d{1,2})$")
 
 
-def expand_message(part):
-    """把一个消息写法展开成候选 ASN.1 名（含简称/全名互转）。"""
+def expand_message(part, aliases=None):
+    """把一个消息写法展开成候选名。域给了别名表时只按别名展开。"""
     p = part.strip()
     cands = [p] if p else []
+    if aliases is not None:
+        return cands + list(aliases.get(p, []))
     m = SIB.match(p)
     if m:
         cands.append(f"SystemInformationBlockType{int(m.group(1))}")
@@ -69,11 +71,11 @@ def split_messages(raw):
     return parts or ([s.strip()] if s.strip() else [])
 
 
-def resolve_message(raw, known):
+def resolve_message(raw, known, aliases=None):
     """返回 (是否合法, 未知片段列表)。复合写法中任一子项未知即视为非法。"""
     unknown = []
     for part in split_messages(raw):
-        cands = expand_message(part)
+        cands = expand_message(part, aliases)
         if not cands:
             continue
         if not any(c in known for c in cands):
@@ -85,10 +87,19 @@ def keywords(text):
     return {w for w in norm(text).split() if len(w) >= 4 and w not in STOP}
 
 
+def _skip_message(raw, patterns):
+    """域给了跳过模式时只按域规则判；否则退回 RRC 的物理层/NAS 写法。"""
+    if patterns:
+        return any(re.fullmatch(p, raw) for p in patterns)
+    return bool(NON_RRC.match(raw))
+
+
 def validate(ir, symbols):
     msgs = symbols["messages"]
     known = set(msgs) | set(symbols.get("known_uncovered", [])) | set(symbols.get("all_definitions", [])) | set(symbols.get("all_defined_names", []))
     gids = set(symbols.get("global_identifiers", []))
+    aliases = symbols.get("message_aliases")
+    skip_patterns = symbols.get("non_message_patterns") or []
     out = []
 
     for m in ir.get("steps") or []:
@@ -96,14 +107,15 @@ def validate(ir, symbols):
         if not raw:
             continue
         # 物理层/NAS 写法本来就不是 ASN.1 消息名，跳过；其余非空写法一律判。
-        if NON_RRC.match(raw):
+        if _skip_message(raw, skip_patterns):
             continue
-        ok, unknown = resolve_message(raw, known)
+        ok, unknown = resolve_message(raw, known, aliases)
         if not ok:
             out.append({"rule": "R1", "path": f"steps[{m.get('st')}].message",
                         "detail": f"unknown message: {'/'.join(unknown)}"})
 
-    extras = symbols.get("manual_review_by_message") or MESSAGE_FIELD_EXTRA
+    extras = (symbols["manual_review_by_message"]
+              if "manual_review_by_message" in symbols else MESSAGE_FIELD_EXTRA)
     for mt in ir.get("messages") or []:
         msg = (mt.get("message") or "").strip()
         if msg not in msgs:          # 未覆盖消息跳过 R2

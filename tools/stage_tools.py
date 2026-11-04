@@ -21,6 +21,7 @@ GOLD_IE = os.path.join(DATA, "ir", "ie")
 TRACE_DIR = os.path.join(DATA, "trace")
 
 sys.path.insert(0, HERE)
+import domains as domain_registry
 
 STRICTNESS = {
     "strict": ("R1", "R2", "R3"),
@@ -32,6 +33,27 @@ MODES = ("steps", "full", "repair_only")
 
 class ToolError(Exception):
     pass
+
+
+_ACTIVE = None
+
+
+def set_domain(name=None):
+    """按进程切换域；返回域配置。"""
+    global _ACTIVE, BENCH, CTX, SYMBOLS
+    _ACTIVE = domain_registry.get(name)
+    BENCH, CTX, SYMBOLS = _ACTIVE["bench"], _ACTIVE["ctx"], _ACTIVE["symbols"]
+    return _ACTIVE
+
+
+def active_domain():
+    return _ACTIVE or domain_registry.get("rrc")
+
+
+def _out_dir(rejected=False):
+    base = "out_rejected" if rejected else "out"
+    d = active_domain()
+    return os.path.join(DATA, base) if d["id"] == "rrc" else os.path.join(DATA, base, d["id"])
 
 
 def _load(path):
@@ -107,7 +129,7 @@ def prepare_case(case):
     ctx = _ctx(case)
     ins = bench.get("inputs") or {}
     import gen_ie
-    cand = gen_ie.candidate_messages(ctx, SYMBOLS) if os.path.exists(SYMBOLS) else []
+    cand = gen_ie.candidate_messages(ctx, SYMBOLS, active_domain()) if os.path.exists(SYMBOLS) else []
     data = {
         "case_id": case,
         "title": bench.get("title", ""),
@@ -124,7 +146,7 @@ def list_candidates(case):
     t0 = time.time()
     case, _ = _case(case)
     import gen_ie
-    cand = gen_ie.candidate_messages(_ctx(case), SYMBOLS)
+    cand = gen_ie.candidate_messages(_ctx(case), SYMBOLS, active_domain())
     return {"data": {"case_id": case, "candidates": cand, "abstain": not cand},
             "trace": _trace("list_candidates", t0, case=case)}
 
@@ -150,8 +172,8 @@ def compare_gold(case, ir=None):
     case, _ = _case(case)
     import score
     ir = ir if isinstance(ir, dict) else (
-        _load(os.path.join(DATA, "out", case + ".json"))
-        or _load(os.path.join(DATA, "out_rejected", case + ".json")))
+        _load(os.path.join(_out_dir(), case + ".json"))
+        or _load(os.path.join(_out_dir(rejected=True), case + ".json")))
     if not isinstance(ir, dict):
         raise ToolError("no_ir: %s" % case)
     gen = [score.norm_ie(i.get("name", ""))
@@ -189,7 +211,8 @@ def generate_steps_tool(case, repairs=1):
     t0 = time.time()
     case, _ = _case(case)
     import gen_steps
-    steps, meta = gen_steps.generate_steps(_ctx(case), repairs=max(0, int(repairs)))
+    steps, meta = gen_steps.generate_steps(_ctx(case), repairs=max(0, int(repairs)),
+                                           profile=active_domain())
     if meta.get("error"):
         return {"data": {"case_id": case, "steps": [], "error": meta["error"]},
                 "trace": _trace("generate_steps", t0, case=case, ok=False)}
@@ -204,12 +227,13 @@ def generate_ies_tool(case, steps=None, messages=None):
     ctx = _ctx(case)
     if not (isinstance(steps, list) and steps):
         raise ToolError("steps_required")
-    pool = gen_ie.candidate_messages(ctx, SYMBOLS)
+    pool = gen_ie.candidate_messages(ctx, SYMBOLS, active_domain())
     pick = [m for m in pool if not messages or m in messages]
     if not pick:
         return {"data": {"case_id": case, "messages": [], "status": "abstained"},
                 "trace": _trace("generate_ies", t0, case=case)}
-    msgs = [gen_ie.generate_ie(ctx, steps, m, SYMBOLS) for m in pick]
+    system = active_domain().get("ie_system")
+    msgs = [gen_ie.generate_ie(ctx, steps, m, SYMBOLS, system=system) for m in pick]
     return {"data": {"case_id": case, "messages": msgs, "calls": len(msgs)},
             "trace": _trace("generate_ies", t0, case=case, calls=len(msgs))}
 
@@ -261,7 +285,8 @@ def repair_step(ir, strictness="strict", skills=None):
         if idx is None:
             continue
         fixed = gen_ie.generate_ie(ctx, out.get("steps") or [], msg, SYMBOLS,
-                                   feedback=feedback, hint=hint)
+                                   feedback=feedback, hint=hint,
+                                   system=active_domain().get("ie_system"))
         if fixed.get("ies") or not (msgs[idx].get("ies") or []):
             msgs[idx] = fixed
             actions.append({"layer": "fields", "message": msg})
