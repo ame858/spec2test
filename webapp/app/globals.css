@@ -111,13 +111,16 @@ button {
   max-width: 46rem;
   width: 100%;
   margin: 0 auto;
-  padding: 2rem 1rem 1rem;
+  padding: 4.5rem 1rem 1rem;
 }
 .chat-sparse .copilotKitInputContainer {
   max-width: 46rem;
   width: 100%;
   margin: 0 auto;
   padding: 0 1rem 1.25rem;
+}
+.chat-sparse.hero-mode .copilotKitChatBody > div:has(textarea) {
+  display: none;
 }
 .chat-sparse .copilotKitInput {
   border-radius: 0.9rem;
@@ -145,4 +148,44 @@ button {
 
 html {
   caret-color: rgb(var(--accent-solid));
+}
+
+/* 聊天里的 Markdown 表格：细线、紧凑、表头浅色 */
+.copilotKitMessages table {
+  width: 100%;
+  margin: 0.5rem 0;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.copilotKitMessages th,
+.copilotKitMessages td {
+  border-bottom: 1px solid rgb(var(--line));
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.copilotKitMessages th {
+  color: rgb(var(--muted));
+  font-weight: 500;
+  white-space: nowrap;
+}
+.copilotKitMessages td {
+  color: rgb(var(--ink));
+}
+.copilotKitMessages td:first-child {
+  white-space: nowrap;
+  color: rgb(var(--muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+/* 抽屉打开时，页面上的浮动控件退场，避免遮挡浮层 */
+.global-floating {
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+body[data-drawer="open"] .global-floating {
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
 }

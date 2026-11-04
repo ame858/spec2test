@@ -197,7 +197,7 @@ export function renderIntentMarkdown(model: ExportModel): string {
 
   lines.push("## 来源");
   lines.push("");
-  lines.push(`Spec2Test · 校验器判定 · 生成于 ${dateOnly(model.generatedAt)}`);
+  lines.push(`VeriSpec · 校验器判定 · 生成于 ${dateOnly(model.generatedAt)}`);
   if (model.status === "abstained") {
     lines.push("");
     lines.push(
@@ -224,7 +224,7 @@ export function buildIntentJson(model: ExportModel): Record<string, unknown> {
   doc.messages = model.messages;
   doc.violations = model.violations;
   doc.provenance = {
-    tool: "Spec2Test",
+    tool: "VeriSpec",
     judge: "deterministic-validator",
     generated_at: model.generatedAt.toISOString(),
   };

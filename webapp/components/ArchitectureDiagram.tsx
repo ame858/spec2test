@@ -10,7 +10,7 @@ export function ArchitectureDiagram() {
       aria-labelledby="arch-title arch-desc"
       className="w-full"
     >
-      <title id="arch-title">Spec2Test 智能体结构</title>
+      <title id="arch-title">VeriSpec 智能体结构</title>
       <desc id="arch-desc">
         对话与参数进入编排层，模型选择阶段工具生成产物；确定性校验器给出违规清单，
         清单回到编排层做定向修复，最多 N 轮。

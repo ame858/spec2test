@@ -40,10 +40,12 @@ export function CaseDrawer() {
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.body.dataset.drawer = "open";
     closeRef.current?.focus();
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      delete document.body.dataset.drawer;
     };
   }, [caseId, close]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Check, ChevronLeft, ChevronRight, Plus, Square, X } from "lucide-react";
+import { ArrowUp, Check, ChevronLeft, ChevronRight, Mic, Plus, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, type SkillItem, type ToolItem } from "@/lib/api";
 import {
@@ -24,10 +24,15 @@ type Props = {
   isVisible?: boolean;
 };
 
+/** 空态示例 chip 通过事件把一句话送进对话，避免从外部直接改 CopilotKit 内部状态。 */
+const SEND_EVENT = "s2t-send";
+
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="px-1 py-1.5">
-      <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted">{title}</div>
+    <div className="px-1 py-1">
+      {title && (
+        <div className="px-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted">{title}</div>
+      )}
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -46,7 +51,7 @@ function Choice({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
       <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
         {active && <Check className="h-3.5 w-3.5 text-accent-ink" />}
@@ -56,12 +61,24 @@ function Choice({
   );
 }
 
-function NavRow({ title, meta, onClick }: { title: string; meta: string; onClick: () => void }) {
+function NavRow({
+  title,
+  meta,
+  active,
+  onClick,
+}: {
+  title: string;
+  meta: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 border-t border-line/60 px-3 py-2 text-left text-xs transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className={`flex w-full items-center gap-2 border-t border-line/60 px-3 py-1.5 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+        active ? "bg-accent/10 text-accent-ink" : "hover:bg-accent/10"
+      }`}
     >
       <span className="flex-1">{title}</span>
       <span className="text-[10px] text-muted">{meta}</span>
@@ -76,9 +93,27 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
   const [view, setView] = useState<"main" | "skills" | "mcp">("main");
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [tools, setTools] = useState<ToolItem[]>([]);
+  const [micOn, setMicOn] = useState(false);
+  const [micSupported, setMicSupported] = useState(false);
+  const recRef = useRef<{ stop: () => void } | null>(null);
   const opts = useRunOptions();
   const boxRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const onExternalSend = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (text && !inProgress) void onSend(text);
+    };
+    window.addEventListener(SEND_EVENT, onExternalSend);
+    return () => window.removeEventListener(SEND_EVENT, onExternalSend);
+  }, [onSend, inProgress]);
+
+  useEffect(() => {
+    const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+    setMicSupported(Boolean(w.SpeechRecognition || w.webkitSpeechRecognition));
+    return () => recRef.current?.stop();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -121,6 +156,35 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
 
   const readonly = tools.filter((t) => !t.model);
   const effectiveTools = opts.mcpTools ?? readonly.map((t) => t.name);
+
+  const toggleMic = () => {
+    if (micOn) {
+      recRef.current?.stop();
+      setMicOn(false);
+      return;
+    }
+    const w = window as unknown as {
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
+    };
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.lang = "zh-CN";
+    rec.interimResults = false;
+    rec.continuous = false;
+    rec.onresult = (e: any) => {
+      const said = Array.from(e.results as ArrayLike<any>)
+        .map((r: any) => r[0]?.transcript ?? "")
+        .join("");
+      if (said) setText((prev) => (prev ? `${prev} ${said}` : said));
+    };
+    rec.onend = () => setMicOn(false);
+    rec.onerror = () => setMicOn(false);
+    recRef.current = rec;
+    rec.start();
+    setMicOn(true);
+  };
 
   const toggleSkill = (name: string) =>
     setRunOptions({
@@ -178,23 +242,12 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
     });
 
   return (
-    <div ref={boxRef} className="relative w-full">
+    <div ref={boxRef} className="relative mx-auto w-full max-w-[46rem]">
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 w-[19rem] overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
-          <div className="flex items-center justify-between border-b border-line px-3 py-2">
-            {view === "main" ? (
+        <div className="absolute bottom-full left-0 z-30 mb-2 flex items-start gap-2">
+          <div className="w-[15rem] overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
+            <div className="flex items-center justify-between border-b border-line px-3 py-1.5">
               <span className="text-xs font-medium">运行参数</span>
-            ) : (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-accent-ink"
-                onClick={() => setView("main")}
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                {view === "skills" ? "技能" : "MCP 连接器"}
-              </button>
-            )}
-            {view === "main" ? (
               <button
                 type="button"
                 className="text-[11px] text-muted hover:text-accent-ink"
@@ -202,120 +255,129 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
               >
                 恢复默认
               </button>
-            ) : (
-              <span className="text-[11px] text-muted">
-                {view === "skills" ? `${opts.skills.length} 已选` : `${effectiveTools.length}/${readonly.length}`}
-              </span>
-            )}
-          </div>
-          <div className="max-h-[60vh] overflow-y-auto scroll-thin">
-            {view === "main" ? (
-              <>
-                <Group title="编排方式">
-                  {(Object.keys(ENGINE_LABELS) as Engine[]).map((e) => (
-                    <Choice
-                      key={e}
-                      active={opts.engine === e}
-                      label={ENGINE_LABELS[e]}
-                      onClick={() => setRunOptions({ engine: e })}
-                    />
-                  ))}
-                  {opts.engine === "agent" && (
-                    <div className="px-2 pt-1 text-[10px] text-muted">
-                      模型自行决定调用顺序；生成范围、修复轮数、严格度由它判断，预算 8 次工具调用。
-                    </div>
-                  )}
-                </Group>
-                {opts.engine === "pipeline" && (
-                  <>
-                    <Group title="生成范围">
-                      {(Object.keys(MODE_LABELS) as RunMode[]).map((m) => (
-                        <Choice
-                          key={m}
-                          active={opts.mode === m}
-                          label={MODE_LABELS[m]}
-                          onClick={() => setRunOptions({ mode: m })}
-                        />
-                      ))}
-                    </Group>
-                    <Group title="修复轮数">
-                      {REPAIR_CHOICES.map((n) => (
-                        <Choice
-                          key={n}
-                          active={opts.repairs === n}
-                          label={n === 0 ? "不修复" : n === 1 ? "1 轮（默认）" : `最多 ${n} 轮`}
-                          onClick={() => setRunOptions({ repairs: n })}
-                        />
-                      ))}
-                    </Group>
-                    <Group title="校验严格度">
-                      {(Object.keys(STRICTNESS_LABELS) as Strictness[]).map((s) => (
-                        <Choice
-                          key={s}
-                          active={opts.strictness === s}
-                          label={STRICTNESS_LABELS[s]}
-                          onClick={() => setRunOptions({ strictness: s })}
-                        />
-                      ))}
-                    </Group>
-                  </>
-                )}
-                <NavRow
-                  title="技能"
-                  meta={opts.skills.length ? `已选 ${opts.skills.length}` : `${skills.length} 个`}
-                  onClick={() => setView("skills")}
-                />
-                <NavRow
-                  title="MCP 连接器"
-                  meta={`${effectiveTools.length}/${readonly.length} 只读工具`}
-                  onClick={() => setView("mcp")}
-                />
-              </>
-            ) : view === "skills" ? (
-              <Group title="选中后随本次修复提示带入">
-                {skills.length === 0 && <div className="px-2 py-1 text-xs text-muted">技能库读取中…</div>}
-                {skills.map((s) => (
+            </div>
+            <div className="max-h-[52vh] overflow-y-auto scroll-thin">
+              <Group title="编排方式">
+                {(Object.keys(ENGINE_LABELS) as Engine[]).map((e) => (
                   <Choice
-                    key={s.name}
-                    active={opts.skills.includes(s.name)}
-                    label={s.name}
-                    onClick={() => toggleSkill(s.name)}
+                    key={e}
+                    active={opts.engine === e}
+                    label={ENGINE_LABELS[e]}
+                    onClick={() => setRunOptions({ engine: e })}
                   />
                 ))}
               </Group>
-            ) : (
-              <Group title="未勾选的工具不会被助手调用">
-                {readonly.length === 0 && (
-                  <div className="px-2 py-1 text-xs text-muted">连接器读取中…</div>
-                )}
-                {readonly.map((t) => (
-                  <Choice
-                    key={t.name}
-                    active={effectiveTools.includes(t.name)}
-                    label={t.name}
-                    onClick={() => toggleTool(t.name)}
-                  />
-                ))}
-                {readonly.length > 0 && (
-                  <div className="flex justify-between px-2 pt-1 text-[10px] text-muted">
-                    <button type="button" className="hover:text-accent-ink" onClick={() => setRunOptions({ mcpTools: null })}>
-                      全选
-                    </button>
-                    <button type="button" className="hover:text-accent-ink" onClick={() => setRunOptions({ mcpTools: [] })}>
-                      全不选
-                    </button>
-                  </div>
-                )}
-              </Group>
-            )}
+              {opts.engine === "pipeline" && (
+                <>
+                  <Group title="生成范围">
+                    {(Object.keys(MODE_LABELS) as RunMode[]).map((m) => (
+                      <Choice
+                        key={m}
+                        active={opts.mode === m}
+                        label={MODE_LABELS[m]}
+                        onClick={() => setRunOptions({ mode: m })}
+                      />
+                    ))}
+                  </Group>
+                  <Group title="修复轮数">
+                    {REPAIR_CHOICES.map((n) => (
+                      <Choice
+                        key={n}
+                        active={opts.repairs === n}
+                        label={n === 0 ? "不修复" : n === 1 ? "1 轮（默认）" : `最多 ${n} 轮`}
+                        onClick={() => setRunOptions({ repairs: n })}
+                      />
+                    ))}
+                  </Group>
+                  <Group title="校验严格度">
+                    {(Object.keys(STRICTNESS_LABELS) as Strictness[]).map((s) => (
+                      <Choice
+                        key={s}
+                        active={opts.strictness === s}
+                        label={STRICTNESS_LABELS[s]}
+                        onClick={() => setRunOptions({ strictness: s })}
+                      />
+                    ))}
+                  </Group>
+                </>
+              )}
+              <NavRow
+                title="技能"
+                meta={opts.skills.length ? `${opts.skills.length}` : `${skills.length}`}
+                active={view === "skills"}
+                onClick={() => setView(view === "skills" ? "main" : "skills")}
+              />
+              <NavRow
+                title="MCP 连接器"
+                meta={`${effectiveTools.length}/${readonly.length}`}
+                active={view === "mcp"}
+                onClick={() => setView(view === "mcp" ? "main" : "mcp")}
+              />
+            </div>
           </div>
-          <div className="border-t border-line px-3 py-2 text-[11px] text-muted">
-            参数随本次运行下发，不进入对话内容；技能随修复提示带入，未勾选的只读工具不会被助手调用。
-          </div>
+
+          {view !== "main" && (
+            <div className="w-[13rem] overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
+              <div className="flex items-center justify-between border-b border-line px-3 py-1.5">
+                <span className="text-xs font-medium">
+                  {view === "skills" ? "技能" : "MCP 连接器"}
+                </span>
+                <button
+                  type="button"
+                  aria-label="关闭子栏"
+                  className="text-[11px] text-muted hover:text-accent-ink"
+                  onClick={() => setView("main")}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="max-h-[52vh] overflow-y-auto scroll-thin">
+                {view === "skills" ? (
+                  <Group title="">
+                    {skills.length === 0 && (
+                      <div className="px-2 py-1 text-xs text-muted">读取中…</div>
+                    )}
+                    {skills.map((s) => (
+                      <Choice
+                        key={s.name}
+                        active={opts.skills.includes(s.name)}
+                        label={s.name}
+                        onClick={() => toggleSkill(s.name)}
+                      />
+                    ))}
+                  </Group>
+                ) : (
+                  <Group title="">
+                    {readonly.length === 0 && (
+                      <div className="px-2 py-1 text-xs text-muted">读取中…</div>
+                    )}
+                    {readonly.map((t) => (
+                      <Choice
+                        key={t.name}
+                        active={effectiveTools.includes(t.name)}
+                        label={t.name}
+                        onClick={() => toggleTool(t.name)}
+                      />
+                    ))}
+                    {readonly.length > 0 && (
+                      <div className="flex justify-between px-2 pt-1 text-[10px] text-muted">
+                        <button type="button" className="hover:text-accent-ink" onClick={() => setRunOptions({ mcpTools: null })}>
+                          全选
+                        </button>
+                        <button type="button" className="hover:text-accent-ink" onClick={() => setRunOptions({ mcpTools: [] })}>
+                          全不选
+                        </button>
+                      </div>
+                    )}
+                  </Group>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="rounded-[0.9rem] border border-line bg-surface px-3 pb-2 pt-2 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_rgb(0_0_0/0.07)] focus-within:border-accent/40">
+      <div className="flex min-h-[112px] flex-col rounded-[16px] border border-line/80 bg-canvas px-4 pb-3 pt-4 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_28px_rgb(0_0_0/0.07)] transition-shadow duration-200 focus-within:border-line focus-within:shadow-[0_2px_6px_rgb(0_0_0/0.06),0_14px_36px_rgb(0_0_0/0.09)]">
         {chips.length > 0 && (
           <div className="mb-1.5 flex flex-wrap gap-1">
             {chips.map((c) => (
@@ -342,7 +404,7 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
           data-testid="copilot-chat-textarea"
           value={text}
           disabled={chatReady === false}
-          placeholder="给用例号，或描述场景…"
+          placeholder="输入用例号（如 6.7.x），或描述一个场景…"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -350,13 +412,12 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
               void send();
             }
           }}
-          className="max-h-40 w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed outline-none placeholder:text-muted disabled:opacity-60"
+          className="min-h-[60px] max-h-48 w-full flex-1 resize-none bg-transparent px-0 py-0 text-base leading-relaxed outline-none placeholder:text-muted disabled:opacity-60"
         />
-        <div className="mt-1 flex items-center gap-1">
+        <div className="mt-2 flex items-center gap-1">
           <button
             type="button"
             aria-label="运行参数"
-            title="运行参数"
             onClick={() => {
               setView("main");
               setOpen((v) => !v);
@@ -367,12 +428,20 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
           >
             <Plus className={`h-4 w-4 transition ${open ? "rotate-45" : ""}`} />
           </button>
-          <span className="ml-1 hidden text-[11px] text-muted sm:inline">
-            {opts.mode === "full" && opts.repairs === 1 && opts.strictness === "strict"
-              ? "默认：步骤 + IE，修复 1 轮，严格校验"
-              : "参数已调整"}
-          </span>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            {micSupported && (
+              <button
+                type="button"
+                aria-label={micOn ? "停止语音输入" : "语音输入"}
+                aria-pressed={micOn}
+                onClick={toggleMic}
+                className={`flex h-7 w-7 items-center justify-center rounded-full transition ${
+                  micOn ? "bg-bad/10 text-bad" : "text-ink hover:bg-surface"
+                }`}
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            )}
             {inProgress ? (
               <button
                 type="button"
@@ -388,7 +457,7 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
                 aria-label="发送"
                 disabled={!text.trim()}
                 onClick={() => void send()}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-solid text-white transition disabled:opacity-40"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-solid disabled:opacity-40"
               >
                 <ArrowUp className="h-4 w-4" />
               </button>
@@ -396,6 +465,9 @@ export function ChatInput({ inProgress, onSend, onStop, chatReady }: Props) {
           </div>
         </div>
       </div>
+      <p className="mt-2 text-center text-[11px] leading-4 text-muted">
+        内容由 AI 生成，请仔细甄别
+      </p>
     </div>
   );
 }

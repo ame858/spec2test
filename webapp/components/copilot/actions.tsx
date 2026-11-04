@@ -7,6 +7,7 @@ import { currentConversationId } from "@/lib/conversation";
 import { followJob, startRun, waitTerminal } from "@/lib/followJob";
 import { getJob, setJob } from "@/lib/jobStore";
 import { getRunOptions } from "@/lib/runParams";
+import { getDomain } from "@/lib/domain";
 
 const DISABLED = JSON.stringify({ error: "tool_disabled" });
 
@@ -127,7 +128,7 @@ export function CopilotActions() {
     parameters: [{ name: "case", type: "string", description: "用例号", required: true }],
     handler: async ({ case: caseId }: { case: string }) => {
       if (!toolEnabled("prepare_case")) return disabledError("prepare_case");
-      const res = await fetch(`/api/case/${caseId}`);
+      const res = await fetch(`/api/case/${caseId}?domain=${getDomain()}`);
       if (!res.ok) return JSON.stringify({ case: caseId, stages: [], error: res.status });
       const body = await res.json();
       return JSON.stringify({ case: caseId, stages: body.stages ?? [] });
@@ -180,7 +181,7 @@ export function CopilotActions() {
     parameters: [{ name: "case", type: "string", description: "用例号", required: true }],
     handler: async ({ case: caseId }: { case: string }) => {
       if (!toolEnabled("validate_intent")) return disabledError("validate_intent");
-      const res = await fetch(`/api/case/${caseId}`);
+      const res = await fetch(`/api/case/${caseId}?domain=${getDomain()}`);
       if (!res.ok) return JSON.stringify({ error: res.status, case: caseId });
       const body = await res.json();
       return JSON.stringify({ case: caseId, stages: body.stages ?? [] });

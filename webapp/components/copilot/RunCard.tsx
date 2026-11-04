@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { getJobByCase, subscribeJobs } from "@/lib/jobStore";
 import { openCasePanel } from "@/lib/panel";
+import { Disclosure } from "./Disclosure";
 import {
   MODE_LABELS,
   STRICTNESS_LABELS,
@@ -95,11 +96,13 @@ export function RunCard({ caseId }: { caseId: string }) {
           ))}
         </div>
       )}
-      <ul className="scroll-thin mt-2 max-h-40 space-y-0.5 overflow-y-auto text-xs text-muted">
-        {(job.log ?? []).slice(-8).map((l, i) => (
-          <li key={i}>{l.msg}</li>
-        ))}
-      </ul>
+      <Disclosure title="运行轨迹" count={(job.log ?? []).length}>
+        <ul className="scroll-thin max-h-48 space-y-0.5 overflow-y-auto">
+          {(job.log ?? []).slice(-12).map((l, i) => (
+            <li key={i}>{l.msg}</li>
+          ))}
+        </ul>
+      </Disclosure>
       {job.state === "awaiting_approval" && (
         <div className="mt-2 rounded border border-line bg-canvas p-2">
           <div className="text-xs">

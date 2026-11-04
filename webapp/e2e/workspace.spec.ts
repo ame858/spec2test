@@ -1,9 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("工作台渲染对话与状态栏", async ({ page }) => {
+test("工作台渲染浮动控件、对话与输入框", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Spec2Test")).toBeVisible();
   await expect(page.locator('[data-testid="copilot-chat-textarea"]')).toBeVisible();
+  await expect(page.getByText("内容由 AI 生成，请仔细甄别")).toBeVisible();
+  await expect(page.getByRole("button", { name: "收起侧栏" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "数据与评测" })).toBeVisible();
+  await expect(page.getByText("VeriSpec")).toBeVisible();
+  await expect(page.locator('img[src="/brand/icon-512.png"]')).toBeVisible();
+  await expect(page.locator("header")).toHaveCount(0); // 上边栏已移除
 });
 
 test("五个视图路由可达", async ({ page }) => {
@@ -51,13 +56,15 @@ test("技能与连接器走子栏选择并显示为 chip", async ({ page }) => {
   await page.getByRole("button", { name: "sib19-required-fields" }).click();
   await expect(page.getByRole("button", { name: "移除 技能 sib19-required-fields" })).toBeVisible();
 
-  await page.getByRole("button", { name: "技能", exact: true }).click(); // 返回主栏
   await page.getByRole("button", { name: /^MCP 连接器/ }).click();
   await page.getByRole("button", { name: "全不选" }).click();
   await expect(page.getByRole("button", { name: /移除 MCP 0\// })).toBeVisible();
 
   await page.getByRole("button", { name: "全选" }).click();
   await expect(page.getByRole("button", { name: /移除 MCP/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "关闭子栏" }).click();
+  await expect(page.getByRole("button", { name: "关闭子栏" })).toHaveCount(0);
 });
 
 test("证据加载卡有进度条与计时", async ({ page }) => {
@@ -80,6 +87,40 @@ test("用例面板以右侧浮窗打开并按 Esc 关闭", async ({ page }) => {
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0, { timeout: 3000 });
+});
+
+test("运行轨迹默认收起，点击展开", async ({ page }) => {
+  await page.goto("/dev/cards");
+  const d = page.getByTestId("disclosure");
+  await expect(d.getByText(/步骤一/)).toHaveCount(0);
+  await d.getByRole("button", { name: /运行轨迹/ }).click();
+  await expect(d.getByText(/步骤一/)).toBeVisible();
+});
+
+test("侧栏可折叠、标题可内联编辑", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('[data-testid="copilot-chat-textarea"]').waitFor();
+  const aside = page.locator('aside[aria-label="对话"]');
+
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? 0).toBeGreaterThan(200);
+  await page.getByRole("button", { name: "收起侧栏" }).click();
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? -1).toBeLessThan(5);
+  await page.getByRole("button", { name: "展开侧栏" }).click();
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? 0).toBeGreaterThan(200);
+
+  await page.locator('[data-testid="editable-title"]').click();
+  const input = page.locator('[data-testid="editable-title-input"]');
+  await input.fill("回归演示");
+  await input.press("Enter");
+  await expect(page.locator('[data-testid="editable-title"]')).toContainText("回归演示");
+});
+
+test("六阶段证据以时间轴和表格呈现", async ({ page }) => {
+  await page.goto("/dev/cards");
+  const card = page.getByTestId("result-reject");
+  await expect(card.locator("table")).toBeVisible();
+  await expect(card.getByText("generate", { exact: true })).toBeVisible();
+  await expect(card.getByText("阶段")).toBeVisible();
 });
 
 test("旧 hash 链接重定向到新路由", async ({ page }) => {

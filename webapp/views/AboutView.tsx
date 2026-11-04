@@ -53,7 +53,7 @@ export function AboutView() {
         </div>
 
         <p className="mt-4 max-w-prose text-sm leading-relaxed text-muted">
-          Spec2Test 把 3GPP 测试条款编译成可校验的测试意图：步骤、消息序列、每条消息的 IE 字段，
+          VeriSpec 把 3GPP 测试条款编译成可校验的测试意图：步骤、消息序列、每条消息的 IE 字段，
           再由确定性校验器逐条判定。当前覆盖 TS 38.523-1 §6.7 的 8 个 NR NTN 空闲态小区选择/重选用例。
           模型负责生成，规则负责判对错，两者职责分开。
         </p>

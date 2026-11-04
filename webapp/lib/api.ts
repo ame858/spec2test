@@ -1,9 +1,11 @@
 import type { RunOptions } from "./runParams";
+import { getDomain } from "./domain";
 
 export type CaseItem = {  case: string;
   title: string;
   status: string;
   gold_ies: number;
+  domain?: string;
 };
 
 export type Settings = {
@@ -169,7 +171,7 @@ const qs = (o: Record<string, string | number | undefined>) => {
 
 export const api = {
   health: () => call<any>("/api/health"),
-  cases: () => call<CaseItem[]>("/api/cases"),
+  cases: () => call<CaseItem[]>("/api/cases" + qs({ domain: getDomain() })),
   getSettings: () => call<Settings>("/api/settings"),
   saveSettings: (s: Partial<Settings> & { api_key?: string }) =>
     call<any>("/api/settings", { method: "POST", body: JSON.stringify(s) }),
@@ -197,6 +199,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ role, content }),
     }),
+  updateLastAssistant: (id: string, content: string) =>
+    call<{ ok: true; at: number }>(`/api/conversations/${id}/messages/last`, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
+    }),
 
   runs: (limit = 20) => call<RunRec[]>("/api/runs" + qs({ limit })),
 
@@ -214,7 +221,7 @@ export const api = {
   chatGuide: (message: string, conversationId?: string) =>
     call<{ action: "run" | "reply"; case?: string; say: string; source?: string; model?: string }>(
       "/api/chat",
-      { method: "POST", body: JSON.stringify({ message, conversation_id: conversationId }) }
+      { method: "POST", body: JSON.stringify({ message, conversation_id: conversationId, domain: getDomain() }) }
     ),
 
   run: (
@@ -234,6 +241,7 @@ export const api = {
         hitl: Boolean(hitl),
         dry_run: Boolean(dryRun),
         options,
+        domain: getDomain(),
       }),
     }),
   approveJob: (jobId: string, decision: "approve" | "reject", options?: RunOptions) =>

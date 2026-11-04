@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
+import { mergeTextStreamResponse } from "@/lib/anthropic-sse";
 import {
   AnthropicAdapter,
   CopilotRuntime,
@@ -32,9 +33,16 @@ function anthropicBase(raw?: string) {
   }
 }
 
+// 本地代理把回复拆成多个 text block；在这里合并成一段，避免界面被切成碎片。
+const mergedFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input as RequestInfo, init);
+  return mergeTextStreamResponse(res);
+};
+
 const serviceAdapter = new AnthropicAdapter({
   anthropic: new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY || "local-proxy",
+    fetch: mergedFetch,
     baseURL: anthropicBase(process.env.LLM_BASE_URL),
     defaultHeaders: {
       "user-agent": "claude-cli/1.0 (external)",

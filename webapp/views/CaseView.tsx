@@ -6,6 +6,7 @@ import { ArrowLeft, Download, Info, MessageSquare, ShieldAlert, ShieldCheck, XCi
 import { Button, Card, CardBody, CardHead, Chip, Modal, Section, Table, Td, Term, Th } from "../ui";
 import { AsyncState } from "../components/AsyncState";
 import { cn } from "../lib/cn";
+import { domainPaths } from "../lib/domain";
 import { downloadIntentJson, downloadIntentMarkdown } from "../lib/export";
 import {
   goldForMessage,
@@ -82,25 +83,26 @@ function leafFields(t: IeTable): string[] {
   return (t.ies || []).map((i) => i.name);
 }
 
-function buildStages(report?: ReportRow, abstain?: AbstainRow, ie?: IeFile | null, out?: OutFile | null): Stage[] {
+function buildStages(report?: ReportRow, abstain?: AbstainRow, ie?: IeFile | null, out?: OutFile | null, ctx?: CtxFile | null): Stage[] {
   const abstained =
     report?.status === "abstained" || out?.status === "abstained" || abstain?.status === "abstained";
   const inMsg = abstain?.in_msg ?? 0;
   const violations = out?.violations?.length ?? 0;
   const reason = out?.reason || (abstained ? "inputs contain no message/SIB names" : "");
+  const hasSpec = Boolean(ie || ctx);
 
   return [
     {
       key: "ingest",
       label: "读取规范",
-      status: ie === undefined ? "pending" : ie ? "ok" : "failed",
-      summary: ie ? `解析到 ${ie.message_tables.length} 张信令表` : "未找到该用例的规范切片",
+      status: ie === undefined && !ctx ? "pending" : hasSpec ? "ok" : "failed",
+      summary: ie ? `解析到 ${ie.message_tables.length} 张信令表` : ctx ? "规范条款已切片" : "未找到该用例的规范切片",
     },
     {
       key: "context",
       label: "上下文裁剪",
-      status: ie ? "ok" : "pending",
-      summary: ie ? "裁剪后上下文已生成" : "等待规范切片",
+      status: ie || ctx ? "ok" : "pending",
+      summary: ie || ctx ? "裁剪后上下文已生成" : "等待规范切片",
     },
     {
       key: "candidates",
@@ -136,12 +138,12 @@ function buildStages(report?: ReportRow, abstain?: AbstainRow, ie?: IeFile | nul
     {
       key: "score",
       label: "评分",
-      status: abstained ? "skipped" : report ? "ok" : "pending",
+      status: abstained ? "skipped" : report || out ? "ok" : "pending",
       summary: abstained
         ? "弃权：不计分（不是 0 分）"
         : report
         ? `L1 ${fmtNum(report.L1)} · L3 ${fmtL3(report.L3_recall)}`
-        : "等待评分",
+        : "无 gold，不计 L3",
     },
   ];
 }
@@ -212,12 +214,15 @@ export function CaseView({ caseId, embedded = false }: { caseId: string; embedde
     let alive = true;
     setLoading(true);
     (async () => {
+      const paths = domainPaths();
       const [score, abs, ieFile, outFile, ctxFile, explainIdx] = await Promise.all([
         loadScore(),
         loadAbstain(),
-        fetchJson<IeFile>(`/data/ir/ie/${caseId}.json`, `/results/ir/ie/${caseId}.json`),
-        fetchJson<OutFile>(`/data/out/${caseId}.json`, `/results/out/${caseId}.json`),
-        fetchJson<CtxFile>(`/data/ctx/${caseId}.json`, `/results/ctx/${caseId}.json`),
+        paths.irIe
+          ? fetchJson<IeFile>(`${paths.irIe}/${caseId}.json`, `/results/ir/ie/${caseId}.json`)
+          : Promise.resolve({ data: null }),
+        fetchJson<OutFile>(`${paths.out}/${caseId}.json`, `/results/out/${caseId}.json`),
+        fetchJson<CtxFile>(`${paths.ctx}/${caseId}.json`, `/results/ctx/${caseId}.json`),
         fetch("/api/explain", { cache: "no-store" })
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null),
@@ -244,7 +249,7 @@ export function CaseView({ caseId, embedded = false }: { caseId: string; embedde
       const rejected =
         !primary || (!primary.verdict && primary.status !== "abstained")
           ? (await fetchJson<OutFile>(
-              `/data/out_rejected/${caseId}.json`,
+              `${paths.outRejected}/${caseId}.json`,
               `/results/out_rejected/${caseId}.json`
             )).data
           : null;
@@ -275,7 +280,7 @@ export function CaseView({ caseId, embedded = false }: { caseId: string; embedde
     };
   }, [picked, sym]);
 
-  const stages = useMemo(() => buildStages(report, abstain, ie, out), [report, abstain, ie, out]);
+  const stages = useMemo(() => buildStages(report, abstain, ie, out, ctx), [report, abstain, ie, out, ctx]);
 
   const verdict = useMemo(() => {
     if (out?.status === "abstained") return "abstained";

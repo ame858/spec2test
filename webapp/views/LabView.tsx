@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type CaseItem, type RunRec } from "@/lib/api";
 import { currentConversationId } from "@/lib/conversation";
+import { subscribeDomain } from "@/lib/domain";
 import { startRun, waitTerminal } from "@/lib/followJob";
 import { getJobByCase, subscribeJobs } from "@/lib/jobStore";
 import { openCasePanel } from "@/lib/panel";
@@ -45,7 +46,9 @@ export function LabView() {
   }, []);
 
   useEffect(() => {
-    api.cases().then(setCases).catch(() => setCases([]));
+    const loadCases = () => api.cases().then(setCases).catch(() => setCases([]));
+    loadCases();
+    const unsubDomain = subscribeDomain(loadCases);
     loadRuns();
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsub = subscribeJobs(() => {
@@ -57,6 +60,7 @@ export function LabView() {
     return () => {
       if (timer) clearTimeout(timer);
       unsub();
+      unsubDomain();
     };
   }, [loadRuns]);
 

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { ApprovalCard } from "@/components/copilot/ApprovalCard";
 import { LoadingCard } from "@/components/copilot/LoadingCard";
+import { Disclosure } from "@/components/copilot/Disclosure";
 import { ResultCard } from "@/components/copilot/ResultCard";
 import { RunCard } from "@/components/copilot/RunCard";
 import { setJob } from "@/lib/jobStore";
@@ -30,6 +31,14 @@ export default function Page() {
     <main className="space-y-4 p-6" data-testid="cards">
       <div data-testid="run">
         <RunCard caseId="6.7.1.99" />
+      </div>
+      <div data-testid="disclosure">
+        <Disclosure title="运行轨迹" count={3}>
+          <ul>
+            <li>步骤一：读取候选</li>
+            <li>步骤二：生成步骤</li>
+          </ul>
+        </Disclosure>
       </div>
       <div data-testid="loading">
         <LoadingCard title="读取六阶段证据" />

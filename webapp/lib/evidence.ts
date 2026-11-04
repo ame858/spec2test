@@ -1,4 +1,5 @@
 import { fetchJson } from "./http";
+import { domainPaths } from "./domain";
 
 export type SymbolTable = {
   messages: Record<string, { fields?: string[]; paths?: string[] }>;
@@ -15,22 +16,21 @@ export type IeTableLite = {
 
 export type IeFileLite = { message_tables?: IeTableLite[] };
 
-let symbolsPromise: Promise<SymbolTable | null> | null = null;
+const symbolsCache: Record<string, Promise<SymbolTable | null>> = {};
 
-/** 符号表 670KB，按需加载；失败不缓存，允许下次重试。 */
+/** 符号表按域加载并缓存；失败不缓存，允许下次重试。 */
 export function loadSymbols(): Promise<SymbolTable | null> {
-  if (!symbolsPromise) {
-    symbolsPromise = fetchJson<SymbolTable>(
-      "/data/symbols/rrc_symbols.json",
-      "/results/symbols/rrc_symbols.json"
-    )
+  const p = domainPaths();
+  const key = p.symbols;
+  if (!symbolsCache[key]) {
+    symbolsCache[key] = fetchJson<SymbolTable>(p.symbols, p.symbolsFallback)
       .then((r) => r.data)
       .catch(() => {
-        symbolsPromise = null;
+        delete symbolsCache[key];
         return null;
       });
   }
-  return symbolsPromise;
+  return symbolsCache[key];
 }
 
 /** 某字段在符号表里的完整路径（可能多条，如多个 nonCriticalExtension 层级）。 */

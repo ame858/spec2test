@@ -1,6 +1,7 @@
 "use client";
 
 import { openCasePanel } from "@/lib/panel";
+import { StageTimeline } from "./StageTimeline";
 
 export type Stage = { stage: string; status?: string; summary?: string; detail?: Record<string, unknown> };
 type Violation = { rule: string; path: string; detail: string };
@@ -36,24 +37,7 @@ export function ResultCard({
         <span>L3：{L3 ?? "—"}</span>
         <span>违规：{violations.length}</span>
       </div>
-      <ul className="mt-2 space-y-1 text-xs">
-        {stages.map((s) => (
-          <li key={s.stage} className="flex justify-between gap-2">
-            <span>{s.stage}</span>
-            <span
-              className={
-                s.status === "ok"
-                  ? "text-ok-ink"
-                  : s.status === "rejected" || s.status === "failed"
-                    ? "text-bad"
-                    : "text-muted"
-              }
-            >
-              {s.summary || s.status || "未知"}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <StageTimeline stages={stages} />
       {violations.length > 0 && (
         <ul className="mt-2 space-y-1 text-xs text-bad">
           {violations.map((v, i) => (
