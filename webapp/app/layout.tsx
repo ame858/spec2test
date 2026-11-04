@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "@fontsource-variable/inter";
+import "@fontsource-variable/archivo";
+import "@fontsource/jetbrains-mono/400.css";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
 import { AppProviders } from "@/components/AppProviders";

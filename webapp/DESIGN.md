@@ -28,6 +28,36 @@ typography:
     fontWeight: 600
     lineHeight: 1.18
     letterSpacing: "-0.02em"
+  wordmark:
+    fontFamily: "Inter Variable, system-ui, -apple-system, Segoe UI, Microsoft YaHei, sans-serif"
+    fontSize: "80px"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.045em"
+  wordmark-sm:
+    fontFamily: "Inter Variable, system-ui, -apple-system, Segoe UI, Microsoft YaHei, sans-serif"
+    fontSize: "56px"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.045em"
+  cover-display:
+    fontFamily: "Archivo Variable, system-ui, sans-serif"
+    fontSize: "104px"
+    fontWeight: 600
+    lineHeight: 0.95
+    letterSpacing: "-0.04em"
+  cover-display-sm:
+    fontFamily: "Archivo Variable, system-ui, sans-serif"
+    fontSize: "64px"
+    fontWeight: 600
+    lineHeight: 0.95
+    letterSpacing: "-0.04em"
+  cover-sub:
+    fontFamily: "Archivo Variable, system-ui, sans-serif"
+    fontSize: "26px"
+    fontWeight: 500
+    lineHeight: 1.25
+    letterSpacing: "-0.01em"
   title:
     fontFamily: "Inter Variable, system-ui, -apple-system, Segoe UI, Microsoft YaHei, sans-serif"
     fontSize: "20px"
@@ -52,6 +82,12 @@ typography:
     fontWeight: 500
     lineHeight: 1.5
     letterSpacing: "0.01em"
+  annotation:
+    fontFamily: "Inter Variable, system-ui, -apple-system, Segoe UI, Microsoft YaHei, sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.45
+    letterSpacing: "0em"
   numeric:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
     fontSize: "12px"
@@ -144,7 +180,8 @@ components:
 ## Typography
 
 **Display / Body Font:** Inter Variable（回退 system-ui、Segoe UI、Microsoft YaHei）
-**Numeric / Mono Font:** ui-monospace、SFMono-Regular、Menlo、Consolas
+**Cover / Wordmark Font:** Archivo Variable（封面文档号与品牌字标）
+**Numeric / Mono Font:** JetBrains Mono、ui-monospace、SFMono-Regular、Menlo、Consolas
 
 **Character:** 一套无衬线承担全部层级，靠字号、字重与颜色拉开差距；数字单独走等宽，让判定与指标可以竖向对齐。
 中文回退到雅黑，字距与行高按中英混排调过，不靠字重堆气势。
@@ -152,10 +189,15 @@ components:
 ### Hierarchy
 - **Display**（600，40px，行高 1.15）：只用于空状态与落地页的主标题，每屏最多一个。
 - **Display-sm**（600，32px，行高 1.18）：窄屏（<640px）下的 Display 替代，避免中文单字孤行。
+- **Wordmark**（600，80px / 窄屏 56px，字距 -0.045em）：首屏品牌字标，只用于空状态与落地页。
+- **Cover-display**（Archivo 600，104px / 窄屏 64px，行高 0.95）：封面上的文档号，是封面的主视觉。
+- **Cover-sub**（Archivo 500，26px）：封面主标题下方的产品主张。
+- **Mono annotations**（JetBrains Mono 400，10–12px，宽字距）：封面元数据、版本号、示意图标注，只用于工程性标注，不用于正文。
 - **Title**（600，20px，行高 1.3）：页面标题，每屏一个。
 - **Headline**（600，16px，行高 1.4）：卡片标题、区块标题。
 - **Body**（400，14px，行高 1.6）：正文；长文控制在 65–75ch。
 - **Label**（500，12px，行高 1.5）：说明、参数名、表头。
+- **Annotation**（400，11px，行高 1.45）：免责声明与极小标注，仅此一处用途。
 - **Numeric**（400，12–13px，等宽，`tnum`）：用例号、L1/L3、违规数、耗时。
 
 ### Named Rules

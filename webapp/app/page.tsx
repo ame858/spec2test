@@ -1,7 +1,7 @@
 "use client";
 
 import { CopilotChat } from "@copilotkit/react-ui";
-import { CornerDownLeft, PanelLeft, Search, SquarePen } from "lucide-react";
+import { ArrowUp, Mic, PanelLeft, Plus, Search, SquarePen } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChatHistoryBridge } from "@/components/copilot/ChatHistoryBridge";
 import { ConversationList } from "@/components/copilot/ConversationList";
@@ -32,12 +32,8 @@ const INSTRUCTIONS = `你是 VeriSpec 的测试意图编译器助手，只覆盖
 
 type TraceTarget = { jobId: string; case: string };
 
-const STEPS = [
-  { n: "01", t: "读取规范", d: "条款切片 + 符号表" },
-  { n: "02", t: "生成意图", d: "步骤 / 消息 / 字段" },
-  { n: "03", t: "确定性校验", d: "R1 · R2 · R3" },
-  { n: "04", t: "判定", d: "通过 / 拒收 / 弃权" },
-];
+const DISPLAY = '"Archivo Variable", system-ui, sans-serif';
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
 
 function EmptyHero() {
   const [domain, setDomainState] = useState<"rrc" | "ml">("rrc");
@@ -57,11 +53,6 @@ function EmptyHero() {
       alive = false;
     };
   }, [domain]);
-
-  const scope =
-    domain === "ml"
-      ? "覆盖 1 个用例 · TS 28.105 §6.2c · AI/ML 管理"
-      : "覆盖 8 个用例 · TS 38.523-1 §6.7 · NR NTN";
 
   const filtered = useMemo(() => {
     const k = q.trim().toLowerCase();
@@ -88,69 +79,113 @@ function EmptyHero() {
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center px-6">
-      <div className="pointer-events-auto w-full max-w-[56rem]">
-        <h1 className="text-[32px] font-semibold leading-[1.12] tracking-[-0.02em] text-ink sm:text-[40px]">
-          从条款到判定，四步
-        </h1>
-        <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-muted">
-          模型只负责生成与修复；通过与否由确定性规则给出。
-        </p>
-
-        <div className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {STEPS.map((s, i) => (
-            <div key={s.n} className="relative rounded-[10px] border border-line bg-canvas px-4 py-4">
-              <div className="font-mono text-xs text-muted tabular-nums">{s.n}</div>
-              <div className="mt-2 text-sm font-medium text-ink">{s.t}</div>
-              <div className="mt-1 text-xs leading-relaxed text-muted">{s.d}</div>
-              {i < STEPS.length - 1 && (
-                <span className="absolute -right-2 top-1/2 hidden h-px w-4 bg-line lg:block" aria-hidden />
-              )}
-            </div>
-          ))}
+    <div
+      className="pointer-events-none absolute inset-0 z-[5] overflow-hidden bg-canvas px-8 pb-24 pt-10 sm:px-12"
+      style={{ fontFamily: DISPLAY }}
+    >
+      <div className="pointer-events-auto mx-auto flex h-full w-full max-w-[64rem] flex-col">
+        <div className="flex items-baseline justify-between border-b border-ink pb-3 pr-56">
+          <span className="text-sm font-semibold tracking-[0.08em]">VERISPEC</span>
+          <span className="text-xs tracking-[0.08em]" style={{ fontFamily: MONO }}>
+            TECHNICAL SPECIFICATION
+          </span>
         </div>
 
-        <div className="mt-6">
-          <div className="flex h-12 items-center gap-3 rounded-[14px] border border-line bg-canvas px-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_rgb(0_0_0/0.06)]">
-            <Search className="h-4 w-4 text-muted" />
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setIdx(0);
-              }}
-              onKeyDown={onKeyDown}
-              placeholder="输入用例号，或描述一个场景…"
-              className="h-full flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
-            />
-            <CornerDownLeft className="h-4 w-4 text-muted" />
+        <div className="mt-10">
+          <div className="text-xs tracking-[0.18em]" style={{ fontFamily: MONO }}>
+            {domain === "ml" ? "3GPP · AI/ML 管理" : "3GPP · NR · NTN"}
           </div>
+          <div className="mt-2 text-[64px] font-semibold leading-[0.95] tracking-[-0.04em] sm:text-[104px]">
+            {domain === "ml" ? "TS 28.105" : "TS 38.523-1"}
+          </div>
+          <div className="mt-3 text-[20px] font-medium leading-[1.25] tracking-[-0.01em] sm:text-[26px]">
+            把规范条款，编译成可校验的测试意图
+          </div>
+        </div>
+
+        <div className="mt-8 w-full max-w-[46rem]">
+          <div className="flex min-h-[112px] flex-col rounded-[16px] border border-line/80 bg-canvas px-4 pb-2 pt-3">
+            <div className="flex flex-1 items-start gap-3">
+              <Search className="mt-1 h-4 w-4 shrink-0 text-muted" />
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setIdx(0);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder="输入用例号（如 6.7.x），或描述一个场景…"
+                className="h-full w-full flex-1 bg-transparent text-base leading-relaxed text-ink outline-none placeholder:text-muted"
+              />
+            </div>
+            <div className="mt-2 flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="参数"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-ink"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="语音"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-ink"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="发送"
+                  onClick={() => {
+                    if (filtered[idx]) run(filtered[idx].case);
+                    else if (q.trim()) window.dispatchEvent(new CustomEvent("s2t-send", { detail: q.trim() }));
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-solid"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 text-center text-[11px] text-muted">内容由 AI 生成，请仔细甄别</p>
           {q.trim() && (
-            <div className="mt-1.5 overflow-hidden rounded-[10px] border border-line bg-canvas">
+            <div className="mt-2 border border-line bg-canvas">
               {filtered.slice(0, 5).map((c, i) => (
                 <button
                   key={c.case}
                   type="button"
                   onMouseEnter={() => setIdx(i)}
                   onClick={() => run(c.case)}
-                  className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${
+                  className={`flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
                     i === idx ? "bg-accent/10" : "hover:bg-surface"
                   }`}
                 >
-                  <span className="font-mono text-xs text-ink tabular-nums">{c.case}</span>
+                  <span className="text-xs tabular-nums" style={{ fontFamily: MONO }}>{c.case}</span>
                   <span className="min-w-0 flex-1 truncate text-xs text-muted">{c.title}</span>
                   <span className="text-xs text-muted">运行</span>
                 </button>
               ))}
               {!filtered.length && (
-                <div className="px-3 py-2 text-xs text-muted">没有匹配的用例，回车直接发送这句话</div>
+                <div className="px-4 py-2 text-xs text-muted">没有匹配的用例，回车直接发送这句话</div>
               )}
             </div>
           )}
         </div>
 
-        <p className="mt-2 text-xs text-muted">{scope} · ↑↓ 选择 · Enter 运行</p>
+        <div className="mt-auto grid grid-cols-3 gap-6 border-t border-line pt-4 text-xs" style={{ fontFamily: MONO }}>
+          {[
+            ["EDITION", domain === "ml" ? "TS 28.105 · v19.6.0" : "v19.6.0 · Rel-19"],
+            ["SCOPE", domain === "ml" ? "1 个用例 · §6.2c" : "8 个用例 · §6.7"],
+            ["VERDICT", "R1 · R2 · R3"],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <div className="text-muted">{k}</div>
+              <div className="mt-1 text-sm text-ink">{v}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
